@@ -32,6 +32,9 @@ clazz = s "class"
 fun :: Parse 
 fun = s "fun"
 
+interface :: Parse
+interface = s "interface"
+
 companion :: Parse 
 companion = s "companion"
 
