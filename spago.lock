@@ -20,6 +20,7 @@
             "tuples",
             "unsafe-coerce",
             "webb-monad",
+            "webb-parsing",
             "webb-random",
             "webb-refer",
             "webb-stateful",
@@ -110,6 +111,7 @@
             "unicode",
             "unsafe-coerce",
             "webb-monad",
+            "webb-parsing",
             "webb-random",
             "webb-refer",
             "webb-stateful",
@@ -769,6 +771,9 @@
     "extra_packages": {
       "spec-discovery": "8.2.0",
       "webb-monad": "0.0.2",
+      "webb-parsing": {
+        "path": "../webb-parsing"
+      },
       "webb-random": "0.0.1",
       "webb-refer": "0.0.2",
       "webb-stateful": "0.0.2",
@@ -1959,6 +1964,25 @@
         "newtype",
         "prelude",
         "transformers"
+      ]
+    },
+    "webb-parsing": {
+      "type": "local",
+      "path": "../webb-parsing",
+      "dependencies": [
+        "arrays",
+        "control",
+        "effect",
+        "either",
+        "foldable-traversable",
+        "maybe",
+        "parsing",
+        "prelude",
+        "strings",
+        "transformers",
+        "tuples",
+        "webb-monad",
+        "webb-stateful"
       ]
     },
     "webb-random": {

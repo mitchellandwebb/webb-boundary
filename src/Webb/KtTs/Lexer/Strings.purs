@@ -2,6 +2,8 @@ module Webb.KtTs.Lexer.Strings where
 
 import Webb.KtTs.Prelude
 
+import Data.Array as A
+import Data.String as Str
 import Parsing.String (string)
 
 
@@ -39,8 +41,25 @@ object = s "object"
 package :: Parse 
 package = s "package"
 
+-- The '*' character. Useful in specified a package import like package1.*
 star :: Parse
 star = s "*"
 
+operator :: Parse
+operator = do
+  strings <- mix1 $ pure <$>
+    [ "*"
+    , "+"
+    , "-"
+    , "="
+    , "$"
+    , "#"
+    ]
+  pure $ Str.joinWith "" (A.fromFoldable strings)
+
+-- An identifier, in simplified form, is any mix of alphanumeric characters 
+-- and underscores. Can refer to packages, type names, and variable names.
 ident :: Parse
-ident = mix [alpha, numeric, underscore]
+ident = do 
+  strings <- mix1 [alphaChar, numChar, s "_"]
+  pure $ Str.joinWith "" $ A.fromFoldable strings

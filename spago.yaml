@@ -19,6 +19,7 @@ package:
     - webb-writer
     - webb-stateful
     - webb-random
+    - webb-parsing
     - profunctor-lenses
     - parsing
   test:
@@ -39,3 +40,5 @@ workspace:
     webb-writer: 0.0.1
     webb-stateful: 0.0.2
     webb-random: 0.0.1
+    webb-parsing: 
+      path: ../webb-parsing
