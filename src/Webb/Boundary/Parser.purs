@@ -55,8 +55,6 @@ sep str = do
   else do
     fail $ "Expected token " <> str <> ", but got " <> t.string
     
-
-    
 type Boundary = 
   { name :: Token
   , methods :: Array Method
