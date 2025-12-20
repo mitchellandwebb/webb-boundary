@@ -39,6 +39,11 @@ import Webb.Stateful.ArrayColl as Arr
 -}
 
 
+-- TODO. Type-checking proceeds in a few phases.
+-- First, check aliases for circularity. Then check params for
+-- completeness. And finally, check functions for correct Aff/Effect usage.
+-- We stop immediately if errors are detected at a phase.
+
 type Env = 
   { symbols :: SymbolTable
   , errors :: ArrayColl String
@@ -119,8 +124,7 @@ instance Visitor CheckVisitor where
       expect this 
         (resolve this p.name.string == "Effect" || 
           resolve this p.name.string == "Aff"
-        ) 
-        $ "Function return type must be Aff or Effect"
+        ) $ "Function return type must be Aff or Effect"
 
   -- Alias definitions must not be circular. They cannot eventually refer
   -- back to themselves in their concrete type, in _any_ of the parameters.
