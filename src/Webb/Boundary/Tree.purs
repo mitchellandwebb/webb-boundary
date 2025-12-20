@@ -4,6 +4,7 @@ import Webb.Boundary.Prelude
 
 import Data.Foldable (for_)
 import Data.Map as Map
+import Data.Newtype (unwrap)
 import Effect.Aff (Aff)
 import Webb.Boundary.Parser as P
 
@@ -31,6 +32,8 @@ visit visitor tree = case tree of
     case t.target of 
       P.AliasedParam p -> do
         visitParam p
+        let uw = unwrap p
+        for_ uw.args visitParam
       P.AliasedMap m -> do
         visitMap m
         
