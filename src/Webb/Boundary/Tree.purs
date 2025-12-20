@@ -9,9 +9,14 @@ import Effect.Aff (Aff)
 import Webb.Boundary.Parser as P
 
 data Tree 
-  = Statements (Array Tree)
+  = Document (Array Tree)
   | Boundary P.Boundary
   | Alias P.Alias
+  
+parseTree :: P.Parse Tree
+parseTree = do
+  trees <- mix [ Boundary <$> P.boundary, Alias <$> P.alias ]
+  pure $ Document trees
   
 class Visitor a where
   boundary :: a -> P.Boundary -> Aff Unit
@@ -22,7 +27,7 @@ class Visitor a where
   
 visit :: forall a. Visitor a => a -> Tree -> Aff Unit
 visit visitor tree = case tree of
-  Statements arr -> do
+  Document arr -> do
     for_ arr \statement -> visit visitor statement
   Boundary t -> do
     boundary visitor t
