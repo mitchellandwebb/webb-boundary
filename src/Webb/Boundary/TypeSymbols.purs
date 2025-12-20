@@ -1,4 +1,4 @@
-module Webb.Boundary.Symbols where
+module Webb.Boundary.TypeSymbols where
 
 import Prelude
 import Webb.Boundary.Prelude
