@@ -1,0 +1,43 @@
+
+We are wanting to write DSL code for the boundary as follows:
+
+A boundary is defined as 
+
+```
+boundary Name where
+  function1 :: Int -> Number -> Effect String
+  function2 :: Name -> Nullable Height -> Aff Example
+```
+
+Type names will always be capitalized. keywords and function names will be entirely in lowercase. To specify whether the bound is syncronous or asyncronous, the final type of a boundary function must be labeled 'Effect' or 'Aff' to signal the intent -- whether the boundary is expected to be blocking to the calling thread or not.
+
+Within a boundary's function, all types should be named. Names can be primitives like Int, Number, Double, Boolean, and String. A type can also be made nullable -- that is, possibly not present -- with a Nullable label. That is the extent of the primitive types. 
+
+Several complex types can be defined, as shown below. The `Array` and `Tuple` types
+are predefined and just need type arguments, but to use labeled tuples (records), a 
+type alias must be defined, as in `Example` below. This gives us a proper name that we can use in the generated output code, so that the target language can reference this type without needing to determine a name.
+
+```
+boundary Name where
+  function1 :: Array Int -> Tuple String Int -> Effect Unit
+  
+type Example = { name :: String, age :: Int }
+type Path = String
+```
+
+As in the example above, the `type` keyword also allows us to alias existing types to improve readability. If the target language supports aliases, the alias will be preserved; otherwise, the final aliased type will be used.
+
+Just as multiple type aliases can be specified in one file, multiple _boundaries_ can
+also be specified in one file. Thus we can have 
+
+```
+boundary Person where
+  function1 :: Array Int -> Tuple String Int -> Effect Unit
+  
+boundary Person2 where
+  function1 :: Int -> String -> Aff Unit
+``` 
+
+Since the boundaries have different names, the function names are allowed to be the same. It is up to code generation to determine how to handle this in the output language, to determine whether this would cause trouble, and to write the output files correctly so that there's no issue.
+
+We also might have _multiple_ boundary files. We don't want that kind of complication. Each boundary file is compiled separately, thank you very much, and does not rely on imports from anywhere else. We'll keep this simple and useful.
