@@ -5,6 +5,7 @@ import Webb.Boundary.Prelude
 import Data.List (List)
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Newtype (class Newtype)
 import Parsing.Token as T
 import Webb.Boundary.Tokens (Token, Kind)
 import Webb.Boundary.Tokens as Tok
@@ -86,16 +87,18 @@ method = try do
   params <- sepBy param (op "->")
   pure { name, params }
   
-type Param = 
+newtype Param = Param_
   { name :: Token
-  , args :: Array Token
+  , args :: Array Param
   }
+  
+derive instance Newtype Param _
   
 param :: Parse Param
 param = try do 
   name <- token Tok.TypeName
-  args <- many $ token Tok.TypeName
-  pure { name, args }
+  args <- many $ param
+  pure $ Param_ { name, args }
   
 type Alias = 
   { name :: Token
