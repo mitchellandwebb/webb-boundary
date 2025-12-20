@@ -1,6 +1,5 @@
 module Webb.Boundary.BoundarySymbols where
 
-import Prelude
 import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
@@ -12,6 +11,7 @@ import Effect (Effect)
 import Effect.Aff (Aff)
 import Webb.Boundary.Parser as P
 import Webb.Boundary.Tokens (Token)
+import Webb.Boundary.TypeCheck (methodParams, methodReturn)
 import Webb.Monad.Prelude (forceMaybe', throwString)
 import Webb.Stateful (localEffect)
 import Webb.Stateful.MapColl (MapColl, newMap)
@@ -91,14 +91,10 @@ instance Visitor BoundaryVisitor where
       aread fmap
       
     getParams :: P.Method -> Effect (Array P.Param)
-    getParams method = do
-      let minit = A.init method.params
-      forceMaybe' "No function parameters were provided" minit
+    getParams = methodParams
       
     getReturn :: P.Method -> Effect P.Param
-    getReturn method = do
-      let mlast = A.last method.params
-      forceMaybe' "No function parameters were provided" mlast
+    getReturn = methodReturn
 
   method = defaultMethod
   param = defaultParam

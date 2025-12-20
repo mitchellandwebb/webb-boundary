@@ -8,7 +8,7 @@ import Data.Array as A
 import Data.Either (Either)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.Tuple (uncurry)
 import Effect.Aff (Aff, throwError)
@@ -71,9 +71,6 @@ newtype SymbolVisitor = SV
   }
   
 instance Visitor SymbolVisitor where
-  boundary = defaultBoundary
-  method = defaultMethod
-  param = defaultParam
   alias (SV v) node = do
     let name = node.name.string
     whenM (M.member v.symbols name) do
@@ -100,6 +97,9 @@ instance Visitor SymbolVisitor where
         in name /\ ALIAS pname
       in Map.fromFoldable converted
         
+  boundary = defaultBoundary
+  method = defaultMethod
+  param = defaultParam
   typeMap = defaultTypeMap
 
 newSymbolVisitor :: Aff SymbolVisitor
@@ -153,3 +153,38 @@ noDanglingAliases symbols =
     throwError errors
   else do
     pure unit
+
+typeExists :: String -> SymbolTable -> Boolean
+typeExists name = Map.member name
+
+isProduct :: String -> SymbolTable -> Boolean
+isProduct name table = let 
+  is = do
+    entry <- Map.lookup name table
+    case entry of
+      PRODUCT _ -> pure true
+      _ -> pure false
+  in fromMaybe false is
+
+argCount :: String -> SymbolTable -> Int
+argCount name table = let 
+  count = do
+    entry <- Map.lookup name table
+    case entry of
+      PRODUCT i -> pure i
+      _ -> pure 0
+  in fromMaybe 0 count
+
+-- Resolve the type symbol to another a final type, ignoring all
+-- aliases
+resolve :: String -> SymbolTable -> String
+resolve name table = fromMaybe "unknown" do
+  entry <- Map.lookup name table
+  case entry of
+    ALIAS next -> 
+      -- An alias resolves to a different type symbol, across multiple aliases.
+      pure $ resolve next table
+    _ -> 
+      -- Any other type resolves to its own symbol name.
+      pure name
+    

@@ -8,8 +8,6 @@ module Webb.Boundary.Prelude
 import Prelude
 
 import Data.Array as A
-import Data.Array.NonEmpty (NonEmptyArray)
-import Data.Array.NonEmpty as NA
 import Data.String (joinWith)
 import Data.Tuple.Nested ((/\), type (/\)) as P
 import Parsing (ParserT)
