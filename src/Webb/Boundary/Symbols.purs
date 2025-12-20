@@ -4,11 +4,14 @@ import Prelude
 import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
+import Data.Array as A
+import Data.Either (Either)
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Tuple (uncurry)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, throwError)
 import Webb.Boundary.Parser (AliasTarget(..), TypeMap)
 import Webb.Monad.Prelude (throwString)
 import Webb.Stateful.MapColl (MapColl, newMap)
@@ -31,6 +34,18 @@ data SymbolType
   | ALIAS String -- We are typed by aliasing another symbol.
   
 type SymbolTable = Map String SymbolType
+
+getGlobalSymbolTable :: Tree -> Aff (Either (Array String) SymbolTable)
+getGlobalSymbolTable tree = do
+  let predefined = default
+  defined <- readDeclaredSymbols tree
+  let 
+    either = do
+      noRedefinedSymbols predefined defined
+      let combined = Map.union predefined defined
+      noDanglingAliases combined
+      pure combined
+  pure either
 
 default :: SymbolTable
 default = Map.fromFoldable
@@ -66,8 +81,9 @@ instance Visitor SymbolVisitor where
 
     case node.target of
       AliasedParam wrapped -> do
-        let p = unwrap wrapped
-            pname = p.name.string
+        let 
+          p = unwrap wrapped
+          pname = p.name.string
         M.insert v.symbols name (ALIAS pname)
       AliasedMap m -> do
         M.insert v.symbols name (RECORD $ convert m)
@@ -76,7 +92,8 @@ instance Visitor SymbolVisitor where
     convert :: TypeMap -> Map String SymbolType
     convert map = let 
       pairs = Map.toUnfoldable map :: Array _
-      converted = pairs <#> uncurry \token wrapped -> let
+      converted = pairs <#> uncurry \token wrapped -> 
+        let
         param = unwrap wrapped
         name = token.string
         pname = param.name.string
@@ -98,8 +115,41 @@ getSymbols (SV s) = do
 -- If a symbol appears twice, since there are no scopes at the top-level, we error.
 -- But aliases are not yet checked for existence, since we don't have all symbols 
 -- until after this function runs.
-declareSymbols :: Tree -> Aff SymbolTable
-declareSymbols tree = do 
+readDeclaredSymbols :: Tree -> Aff SymbolTable
+readDeclaredSymbols tree = do 
   v <- newSymbolVisitor
   visit v tree 
   getSymbols v
+  
+-- Check for redefinitions of old symbols in the new table, and publishes errors.
+noRedefinedSymbols :: SymbolTable -> SymbolTable -> Either (Array String) Unit
+noRedefinedSymbols old new = 
+  let 
+  shared = Map.intersection old new
+  pairs = Map.toUnfoldable shared
+  errors = pairs <#> uncurry \name _ ->  
+    "Illegally redefines an existing type: " <> name
+  in 
+  if errors == [] then do
+    throwError errors
+  else do 
+    pure unit
+    
+-- Checks that all aliases refer to existing symbols in the table
+noDanglingAliases :: SymbolTable -> Either (Array String) Unit
+noDanglingAliases symbols = 
+  let
+  pairs = Map.toUnfoldable symbols
+  errors = A.catMaybes $ pairs <#> uncurry \name entry -> 
+    case entry of 
+      ALIAS target -> 
+        if Map.member target symbols then 
+          Nothing
+        else 
+          Just $ "Alias " <> name <> " refers to undefined symbol " <> target
+      _ -> Nothing
+  in 
+  if errors == [] then do
+    throwError errors
+  else do
+    pure unit
