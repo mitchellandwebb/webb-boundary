@@ -41,3 +41,22 @@ boundary Person2 where
 Since the boundaries have different names, the function names are allowed to be the same. It is up to code generation to determine how to handle this in the output language, to determine whether this would cause trouble, and to write the output files correctly so that there's no issue.
 
 We also might have _multiple_ boundary files. We don't want that kind of complication. Each boundary file is compiled separately, thank you very much, and does not rely on imports from anywhere else. We'll keep this simple and useful.
+
+
+----------------------------------------------
+
+Okay. We now have the parse tree as a pure data structure. There's ... both
+good and bad in that. We cannot easily modify the tree in this form. On the other
+hand, it's well-typed and provides a clear way of extracting information about
+what we have, with a visitor that can at least _try_ to visit items consistently.
+
+But okay. We have this initial data structure, and reason to allow it to be stable. What next? What is it that we want to do with it? Well, first we want to validate a few things. 
+
+- We want to build an initial symbol table. We want to know what symbols are already declared and defined in the global scope (the only scope we have, here)
+- We want to use the symbol table to check that all symbols are actually _defined_. In our case, there's only the global scope, so that's easy-enough to check, but if we had lexical scopes, we'd want to go into each scope and _build on_ the global lexical scope over time as we go deeper into each lexical scope, to see whether all symbols are defined in each scope.
+- We want to use the symbol table to generate knowledge of each symbol's _type_. We might not have all this information initially, but we need to build it up, gradually. In this process, we may need to verify type _completeness_ -- for example, an (Array Array) is no good because the second Array is not a complete type, but an (Array (Array Int)) would be sufficient. This process is thus recursive. We don't necessarily know the dependency order of all types. So we make a best guess and, when we encounter a type within the file, if it depends on other symbols, we type those symbols first. This is an informal graph -- so if we depend on another type, circularly, we detect
+that we've visited this type before and err with a circular type.
+- Once we've checked that all types are complete, we can output the types, ideally in the same order they appear in the file. We'll output it to a single target file, converting it to the right structure in the target language.
+
+One interesting point, though, is circular types -- or rather, recursive types. How can a type ultimately refer to itself? What does that require? The problem is that when a type refers to itself is it well-typed? Well, that depends. In a simple type like a Record -- _no_ . The type is recursive and thus cannot terminate. Although it is _typable_, it is not constructable except by recursive loop. If the type has _alternatives_ that might terminate, then it is possible. But in theory, nothing is 
+wrong with recursive types -- it is, in theory, a valid, terminated type that will simply be impossible to construct at runtime. This differs between Purescript and Kot Kotlin of the implicit _pure references_, and also whether a value is _required_ at runtime -- but it's certainly true that we can obtain subtle construction bugs as a result. Preventing the bare circular type does prevent recursion in a bunch of cases, but naturally, not all.

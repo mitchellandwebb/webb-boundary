@@ -1,0 +1,105 @@
+module Webb.Boundary.Symbols where
+
+import Prelude
+import Webb.Boundary.Prelude
+import Webb.Boundary.Tree
+
+import Data.Map (Map)
+import Data.Map as Map
+import Data.Newtype (unwrap)
+import Data.Tuple (uncurry)
+import Effect.Aff (Aff)
+import Webb.Boundary.Parser (AliasTarget(..), TypeMap)
+import Webb.Monad.Prelude (throwString)
+import Webb.Stateful.MapColl (MapColl, newMap)
+import Webb.Stateful.MapColl as M
+
+
+
+{- Define the basic symbols in the global space, and their type representations. If we do _nominal_ type-checking, this is easy -- each type is just represented by a simple integer or string, and types are the same as long as they refer to the same value. There is no need, when doing type-checking, to do any structural comparisons. 
+
+In our case, we do allow structural comparisons of record types, but boundary types are NOT allowed to be reused in concrete types.
+-}
+
+data SymbolType 
+  = INT
+  | DOUBLE
+  | BOOL
+  | STRING
+  | RECORD (Map String SymbolType)
+  | PRODUCT Int
+  | ALIAS String -- We are typed by aliasing another symbol.
+  
+type SymbolTable = Map String SymbolType
+
+default :: SymbolTable
+default = Map.fromFoldable
+  [ "Int" /\ INT
+  , "Number" /\ DOUBLE
+  , "Double" /\ DOUBLE
+  , "String" /\ STRING
+
+  , "Array" /\ PRODUCT 1
+  , "Map" /\ PRODUCT 2
+  , "Tuple" /\ PRODUCT 2
+  
+  -- The complex function types must be the _return_ types of a function, but
+  -- can appear in an alias. There is no function type otherwise. The complex function
+  -- types CANNOT be arguments.
+  , "Effect" /\ PRODUCT 1
+  , "Aff" /\ PRODUCT 1
+  ]
+  
+newtype SymbolVisitor = SV 
+  { symbols :: MapColl String SymbolType
+
+  }
+  
+instance Visitor SymbolVisitor where
+  boundary = defaultBoundary
+  method = defaultMethod
+  param = defaultParam
+  alias (SV v) node = do
+    let name = node.name.string
+    whenM (M.member v.symbols name) do
+      throwString $ "Global symbol has already been defined: " <> name
+
+    case node.target of
+      AliasedParam wrapped -> do
+        let p = unwrap wrapped
+            pname = p.name.string
+        M.insert v.symbols name (ALIAS pname)
+      AliasedMap m -> do
+        M.insert v.symbols name (RECORD $ convert m)
+        
+    where
+    convert :: TypeMap -> Map String SymbolType
+    convert map = let 
+      pairs = Map.toUnfoldable map :: Array _
+      converted = pairs <#> uncurry \token wrapped -> let
+        param = unwrap wrapped
+        name = token.string
+        pname = param.name.string
+        in name /\ ALIAS pname
+      in Map.fromFoldable converted
+        
+  typeMap = defaultTypeMap
+
+newSymbolVisitor :: Aff SymbolVisitor
+newSymbolVisitor = do
+  syms <- newMap
+  pure $ SV { symbols: syms }
+  
+getSymbols :: SymbolVisitor -> Aff SymbolTable
+getSymbols (SV s) = do
+  aread s.symbols
+
+-- Gets all the declared symbols from the tree. These have not been validated.
+-- If a symbol appears twice, since there are no scopes at the top-level, we error.
+-- But aliases are not yet checked for existence, since we don't have all symbols 
+-- until after this function runs.
+declareSymbols :: Tree -> Aff SymbolTable
+declareSymbols tree = do 
+  v <- newSymbolVisitor
+  visit v tree 
+  getSymbols v

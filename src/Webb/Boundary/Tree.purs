@@ -24,6 +24,21 @@ class Visitor a where
   param :: a -> P.Param -> Aff Unit
   alias :: a -> P.Alias -> Aff Unit
   typeMap :: a -> P.TypeMap -> Aff Unit
+
+defaultBoundary :: forall a. a -> P.Boundary -> Aff Unit
+defaultBoundary _ _ = pure unit
+
+defaultMethod :: forall a. a -> P.Method -> Aff Unit
+defaultMethod _ _ = pure unit
+
+defaultParam :: forall a. a -> P.Param -> Aff Unit
+defaultParam _ _ = pure unit
+
+defaultAlias :: forall a. a -> P.Alias -> Aff Unit
+defaultAlias _ _ = pure unit
+
+defaultTypeMap :: forall a. a -> P.TypeMap -> Aff Unit
+defaultTypeMap _ _ = pure unit
   
 visit :: forall a. Visitor a => a -> Tree -> Aff Unit
 visit visitor tree = case tree of
