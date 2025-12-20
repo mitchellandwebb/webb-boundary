@@ -6,8 +6,8 @@ import Data.List (List)
 import Data.Map (Map)
 import Data.Map as Map
 import Parsing.Token as T
-import Webb.Boundary.Tokens (Kind(..), Token)
-
+import Webb.Boundary.Tokens (Token, Kind)
+import Webb.Boundary.Tokens as Tok
 
 type Parse = Parser (List Token)
 
@@ -32,7 +32,7 @@ token kind = try do
 
 op :: String -> Parse Token
 op str = try do 
-  t <- token Operator
+  t <- token Tok.Operator
   if t.string == str then do
     pure t
   else do
@@ -40,7 +40,7 @@ op str = try do
 
 delim :: String -> Parse Token
 delim str = try do 
-  t <- token Delim
+  t <- token Tok.Delim
   if t.string == str then do
     pure t
   else do
@@ -48,11 +48,13 @@ delim str = try do
 
 sep :: String -> Parse Token
 sep str = do 
-  t <- token Separator
+  t <- token Tok.Separator
   if t.string == str then do
     pure t
   else do
     fail $ "Expected token " <> str <> ", but got " <> t.string
+    
+
     
 type Boundary = 
   { name :: Token
@@ -62,9 +64,9 @@ type Boundary =
 -- Parse a boundary definition.
 boundary :: Parse Boundary
 boundary = try do 
-  _ <- token Boundary 
-  name <- token TypeName
-  _ <- token Where
+  _ <- token Tok.Boundary 
+  name <- token Tok.TypeName
+  _ <- token Tok.Where
   methods <- many method
   
   pure 
@@ -79,7 +81,7 @@ type Method =
 
 method :: Parse Method
 method = try do
-  name <- token FunctionName
+  name <- token Tok.FunctionName
   _ <- op "::"
   params <- sepBy param (op "->")
   pure { name, params }
@@ -91,8 +93,8 @@ type Param =
   
 param :: Parse Param
 param = try do 
-  name <- token TypeName
-  args <- many $ token TypeName
+  name <- token Tok.TypeName
+  args <- many $ token Tok.TypeName
   pure { name, args }
   
 type Alias = 
@@ -105,8 +107,8 @@ data AliasTarget = AliasedParam Param | AliasedMap TypeMap
 -- Parse a type alias
 alias :: Parse Alias
 alias = try do
-  _ <- token Alias
-  name <- token TypeName
+  _ <- token Tok.Alias
+  name <- token Tok.TypeName
   _ <- op "="
   target <- alts [ AliasedParam <$> param, AliasedMap <$> typeMap ]
   pure { name, target }
@@ -123,7 +125,7 @@ typeMap = try do
 
   where
   pair = try do
-    name <- token FunctionName
+    name <- token Tok.FunctionName
     _ <- op "::"
     p <- param
     pure $ name /\ p
