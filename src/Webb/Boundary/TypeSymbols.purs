@@ -13,6 +13,7 @@ import Data.Newtype (unwrap)
 import Data.Tuple (uncurry)
 import Effect.Aff (Aff, throwError)
 import Webb.Boundary.Parser (AliasTarget(..), TypeMap)
+import Webb.Boundary.Parser as P
 import Webb.Monad.Prelude (throwString)
 import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
@@ -187,4 +188,9 @@ resolve name table = fromMaybe "unknown" do
     _ -> 
       -- Any other type resolves to its own symbol name.
       pure name
+      
+-- Check for circular types. We don't necessarily have to err, but
+-- we do have to _be able_ to check if we're circular.
+isCircular :: String -> P.Param -> SymbolTable -> Boolean
+isCircular name wrapped table = true
     

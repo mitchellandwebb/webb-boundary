@@ -58,6 +58,14 @@ expect self success msg = unless success do addError self msg
 resolve :: CheckVisitor -> String -> String 
 resolve (CV env) name = TS.resolve name env.symbols
 
+-- If we detect a circular relation where the param refers back to the
+-- alias symbol in _any_ parts of the param (name or args), add an error.
+checkCircular :: CheckVisitor -> String -> P.Param -> Aff Unit
+checkCircular this@(CV env) name p = do
+  expect this 
+    (not $ isCircular name p env.symbols) 
+    $ "Type definition refers back to itself: " <> name
+
 instance Visitor CheckVisitor where
   -- We check each parameter for existence and completeness
   param self@(CV env) wrapped = do
@@ -113,11 +121,23 @@ instance Visitor CheckVisitor where
           resolve this p.name.string == "Aff"
         ) 
         $ "Function return type must be Aff or Effect"
+
+  -- Alias definitions must not be circular. They cannot eventually refer
+  -- back to themselves in their concrete type, in _any_ of the parameters.
+  -- Because if they do, we can't successfully write out the type.
+  alias this al = do 
+    let name = al.name.string
+    case al.target of 
+      P.AliasedParam p -> do
+        checkCircular this name p
+      P.AliasedMap m -> do
+        let params = Map.values m
+        for_ params \p -> do
+          checkCircular this name p
       
   -- Parameter-checking is covered by 'param' alone. Nothing else is needed
   -- for our use case.
   boundary = defaultBoundary
-  alias = defaultAlias
   typeMap = defaultTypeMap
 
 
