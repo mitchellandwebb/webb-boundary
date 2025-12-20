@@ -1,8 +1,10 @@
-module Webb.Boundary.Lexer.Tokens where
+module Webb.Boundary.Tokens where
 
 import Webb.Boundary.Prelude
 
 import Data.Either (Either(..))
+import Data.Generic.Rep (class Generic)
+import Data.Show.Generic (genericShow)
 import Effect.Class (class MonadEffect, liftEffect)
 import Parsing.String (eof)
 import Parsing.String.Basic (skipSpaces)
@@ -33,6 +35,13 @@ data Kind
   | Alias
   | TypeName
   | FunctionName
+  | Delim
+  | Separator
+  
+derive instance Eq Kind
+derive instance Ord Kind
+derive instance Generic Kind _
+instance Show Kind where show = genericShow
   
 type Parse = Parser String
 
@@ -56,6 +65,8 @@ token = longest
   [ boundary
   , where'
   , operator
+  , delim
+  , separator
   , alias
   , typeName
   , functionName
@@ -85,8 +96,18 @@ where' = asToken Where do s "where"
 
 operator :: Parse Token
 operator = asToken Operator do 
-  strings <- mix [ s "=", s ":" ]
+  strings <- mix [ s "=", s ":", s "-", s ">", s "<" ]
   joined strings
+
+delim :: Parse Token
+delim = asToken Delim do 
+  string <- alts [ s "{-", s "-}", s "{", s "}", s "(", s ")" ]
+  pure string
+
+separator :: Parse Token
+separator = asToken Delim do 
+  string <- alts [ s "," ]
+  pure string
 
 alias :: Parse Token 
 alias = asToken Alias do s "type"
