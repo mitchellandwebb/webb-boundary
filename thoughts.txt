@@ -78,4 +78,19 @@ So we need the types that need to be written, in declaration order, so we can wr
 systematically. And we need them in a form that is _interpretable_. Aliases may be Int,
 Double -- primitives that are easy to convert by looking up the target type in the target
 language. But aliases may also be product types or records. Since circularity is not allowed,
-we should observe a clear declaration path. We _should_.
+we should observe a clear declaration path. We _should_. But when we see product types, how
+do we map these to target types in the target language? And ... the symbol table does
+specify how symbols refer to each other. But it doesn't really store the target 
+type itself; if I say `type A = List Int` and `type B = Map Int Int`, the symbol 
+table understands that B is an alias ... but it doesn't understand what _type_ of
+alias it is. It doesn't have that data; it doesn't store its actual definition data; and
+it ... doesn't necessarily need to, here. So indeed ... what data is actually needed? What
+actually ... _is_ an alias?
+  An alias refers to a complete type. An alias can use _other_ aliases. Thus, an alias
+is a symbol characterized by its complete parameter, NOT any particular single name. Thus,
+it is a symbol to _multiple_ other symbols -- one for each parameter within it. In the end, the correctness of an alias is not determined by the alias itself -- if we were doing type _matching_, then yes, an alias would need to look up the other type by itself -- ALL of the other type -- to derive a concrete fully-reduced parameter. But in terms of the alias referring to a valid symbol -- that is unneeded. Parameters can be validated on their own against the symbol table in this case.
+
+TODO -- tokenizing. TypeName and FunctionName are last ... but they also match the keywords.
+So ... will that work out? Or do they have to be merged?
+TODO -- parsing -- what about (Array (Array Int))? Is that handled correctly?
+TODO -- check for circular aliases earlier.

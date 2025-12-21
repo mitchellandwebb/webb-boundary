@@ -5,18 +5,21 @@ import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
 import Control.Monad.Except (ExceptT, runExceptT)
+import Control.Monad.Loops (anyM)
 import Control.Monad.State (StateT, evalStateT, runStateT)
 import Data.Array as A
 import Data.Either (Either)
+import Data.List as L
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Newtype (unwrap)
 import Data.Tuple (uncurry)
 import Effect.Aff (Aff, throwError)
 import Effect.Aff.Class (liftAff)
-import Webb.Boundary.Parser (AliasTarget(..), TypeMap)
+import Webb.Boundary.Parser (AliasTarget(..), Param, TypeMap)
 import Webb.Boundary.Parser as P
+import Webb.Stateful (localEffect)
 import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
 
@@ -33,7 +36,7 @@ data SymbolType
   | STRING
   | RECORD (Map String SymbolType)
   | PRODUCT Int
-  | ALIAS String -- We are typed by aliasing another symbol.
+  | ALIAS Param 
   
 type SymbolTable = Map String SymbolType
 
@@ -47,7 +50,6 @@ getGlobalSymbolTable tree = do
       defined <- readDeclaredSymbols
       noRedefinedSymbols predefined defined
       let combined = Map.union predefined defined
-      noDanglingAliases combined
       pure combined
 
   eval env prog
@@ -92,10 +94,7 @@ declareAlias alias = do
 
   case alias.target of
     AliasedParam wrapped -> do
-      let 
-        p = unwrap wrapped
-        pname = p.name.string
-      M.insert this.symbols name (ALIAS pname)
+      M.insert this.symbols name (ALIAS wrapped)
     AliasedMap m -> do
       M.insert this.symbols name (RECORD $ convert m)
       
@@ -104,11 +103,8 @@ declareAlias alias = do
   convert map = let 
     pairs = Map.toUnfoldable map :: Array _
     converted = pairs <#> uncurry \token wrapped -> 
-      let
-      param = unwrap wrapped
-      name = token.string
-      pname = param.name.string
-      in name /\ ALIAS pname
+      let name = token.string
+      in name /\ ALIAS wrapped
     in Map.fromFoldable converted
   
   alreadyDefined name = 
@@ -143,25 +139,6 @@ noRedefinedSymbols old new = do
   where 
   illegal name = "Illegally redefines an existing type: " <> name
     
--- Checks that all aliases refer to existing symbols in the table
-noDanglingAliases :: SymbolTable -> Prog Unit
-noDanglingAliases symbols = do
-  let
-    pairs = Map.toUnfoldable symbols
-    errors = A.catMaybes $ pairs <#> uncurry \name entry -> 
-      case entry of 
-        ALIAS target -> 
-          if Map.member target symbols then 
-            Nothing
-          else 
-            Just $ undefined name target
-        _ -> Nothing
-  when (errors == []) do
-    throwError errors
-  where 
-  undefined name target = 
-    "Alias " <> name <> " refers to undefined symbol " <> target
-
 typeExists :: String -> SymbolTable -> Boolean
 typeExists name = Map.member name
 
@@ -182,18 +159,21 @@ argCount name table = let
     entry <- Map.lookup name table
     case entry of
       PRODUCT i -> pure i
-      ALIAS next -> pure $ argCount next table
+      ALIAS _ -> pure 0 -- even aliases have 0 args. They have no type arguments.
       _ -> pure 0
   in fromMaybe 0 count
 
--- Resolve the type symbol to another final type, ignoring all
+-- Resolve the type symbol to a final _first_ type, converting all
 -- aliases. CANNOT handle circular aliases that refer to themselves.
 resolve :: String -> SymbolTable -> String
 resolve name table = fromMaybe "unknown" do
   entry <- Map.lookup name table
   case entry of
-    ALIAS next -> 
+    ALIAS wrapped -> do 
       -- An alias resolves to a different type symbol, across multiple aliases.
+      let
+        p = unwrap wrapped
+        next = p.name.string
       pure $ resolve next table
     _ -> 
       -- Any other type resolves to its own symbol name.
@@ -216,6 +196,7 @@ refersToSymbol name wrapped table =
   searchFor_ args = searchFor args table
   refersToMe childParam = refersToSymbol name childParam table
 
+-- Is the given symbol found somewhere?
 searchFor :: 
   { symbol :: String, startingFrom :: String} -> SymbolTable -> Boolean
 searchFor { symbol, startingFrom: other } table =
@@ -225,9 +206,26 @@ searchFor { symbol, startingFrom: other } table =
     fromMaybe false do
       entry <- Map.lookup other table
       case entry of
-        ALIAS next -> do 
-          pure $ searchFor { symbol, startingFrom: next } table
+        -- We have to search all params of the alias to find out if we are
+        -- referring back to ourselves.
+        ALIAS wrapped -> do 
+          pure $ localEffect $ searchParam wrapped
         _ -> pure false
+  where
+  -- We search each of the params and child params, stopping when the first
+  -- circular match is found.
+  searchParam wrapped = do
+    let 
+      p = unwrap wrapped
+      name = p.name.string
+      args = p.args
+      findSelf = pure $ searchFor { symbol, startingFrom: name } table
+      findArgs = args <#> searchParam
+      programs = [findSelf] <> findArgs
+    anyM identity (L.fromFoldable programs)
+      
+    
+    
     
 
     
