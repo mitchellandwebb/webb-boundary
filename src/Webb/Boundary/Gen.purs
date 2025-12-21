@@ -1,0 +1,152 @@
+module Webb.Boundary.Gen where
+
+import Webb.Boundary.Prelude
+import Webb.Boundary.Tree
+
+import Data.Array as Array
+import Data.Foldable (for_, maximum)
+import Data.Foldable as Trav
+import Data.Map (Map)
+import Data.Map as Map
+import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
+import Data.Set (Set)
+import Data.Set as Set
+import Data.Tuple (fst, snd)
+import Effect.Aff (Aff)
+import Webb.Boundary.Parser as P
+import Webb.Boundary.TypeCheck (methodParams, methodReturn)
+import Webb.Boundary.TypeSymbols (SymbolTable, SymbolType(..))
+import Webb.Monad.Prelude (forceMaybe')
+import Webb.Stateful (localEffect)
+import Webb.Stateful.ArrayColl (newArray)
+import Webb.Stateful.ArrayColl as Arr
+import Webb.Stateful.MapColl as MC
+
+
+{- Define the data structures and functions that will be used by generators to build code.
+-}
+
+type Alias = String /\ AliasTarget
+
+data AliasTarget = AliasMap TypeMap | AliasParam P.Param
+
+type Boundary = String /\ Array FnDef
+
+type TypeMap = Map String P.Param
+
+type FnDef = 
+  { name :: String
+  , args :: Array P.Param
+  , return :: P.Param
+  }
+  
+getAliases :: Tree -> Aff (Array Alias)
+getAliases tree = do
+  arr <- newArray
+  allAliases tree \alias -> addAlias arr alias
+  aread arr
+  
+  where
+  addAlias arr alias = do
+    let name = alias.name.string
+    case alias.target of
+      P.AliasedParam p -> do
+        Arr.addLast arr $ name /\ AliasParam p
+      P.AliasedMap m -> do
+        Arr.addLast arr $ name /\ AliasMap (convert m)
+        
+  convert map = let
+    pairs = Map.toUnfoldable map :: Array _
+    converted = pairs <#> uncurry \token param -> token.string /\ param
+    in Map.fromFoldable converted
+
+getBoundaries :: Tree -> Aff (Array Boundary)
+getBoundaries tree = do
+  boundArray <- newArray
+  allBoundaries tree \b -> addBound boundArray b
+  aread boundArray
+  
+  where
+  addBound boundArray b = do
+    let name = b.name.string
+    defArray <- newArray
+    for_ b.methods \m -> addDef defArray m
+    
+    defs <- aread defArray
+    Arr.addLast boundArray $ name /\ defs
+    
+  addDef defArray m = do
+    let name = m.name.string
+    args <- methodParams m
+    return <- methodReturn m
+    Arr.addLast defArray { name, args, return }
+
+-- Sort the aliases in order of their dependency on each other. Aliases with
+-- fewer dependencies will come first. This is useful if the generated code
+-- requires earlier types to be earlier in the file.
+sortAliases :: SymbolTable -> Array Alias -> Array Alias
+sortAliases table arr = let
+  tierList = aliasTierList table
+  in Array.sortWith (tier tierList) arr 
+  where
+  tier :: AliasTierList -> Alias -> Int
+  tier tierList (name /\ _) = let
+    mindex = Array.findIndex (Set.member name) tierList
+    in localEffect do 
+      forceMaybe' ("Alias wasn't found in any tier: " <> show name) mindex
+
+type AliasTierList = Array (Set String)
+
+-- Use the symbol table to define a tier list of alias symbols, by finding the longest
+-- path back to the top of the tree for each symbol.
+aliasTierList :: SymbolTable -> AliasTierList
+aliasTierList table = localEffect do 
+  tiers <- MC.newMap
+  let 
+    pairs = Map.toUnfoldable table :: Array _
+    maliases = pairs <#> uncurry \name val -> case val of
+      ALIAS _ -> Just name
+      _ -> Nothing
+    aliases = Array.catMaybes maliases :: Array String
+    
+  Trav.for_ aliases \name -> do
+    let score = rootLength name 0
+    MC.update tiers score (Set.singleton name) (Set.insert name)
+  
+  -- Once we have all tier-sets, sort them by scores, and  publish the tiers
+  -- in order of the scores.
+  entries :: Array _ <- Map.toUnfoldable <: tiers
+  let final = entries # Array.sortWith fst >>> map snd :: Array (Set String)
+  pure final
+  
+  where
+  -- Measure the length of the symbol from the root.
+  rootLength :: String -> Int -> Int
+  rootLength name score = localEffect do 
+    let mscore = getScore name score
+    forceMaybe' ("Found no score for: " <> name) mscore
+
+  getScore :: String -> Int -> Maybe Int
+  getScore name score = do 
+    entry <- Map.lookup name table
+    case entry of 
+      ALIAS wrapped -> do
+        let 
+          score' = score + 1 :: Int
+          param = unwrap wrapped
+          pname = param.name.string  :: String
+          nameScore = rootLength pname score' :: Int
+          argNames = param.args <#> paramName :: Array String
+          argScores = (argNames <#> \argName -> rootLength argName score') :: Array Int
+          
+        -- The longest length is how far the param is from the root in _any_ of
+        -- its symbols.
+        max :: Int <- maximum $ [ nameScore ] <> argScores
+        pure max
+      _ -> do 
+        pure score  -- Anything else terminates the search
+
+  paramName :: P.Param -> String
+  paramName wrapped = wrapped # unwrap >>> _.name.string
+

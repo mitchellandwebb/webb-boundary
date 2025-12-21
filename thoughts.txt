@@ -97,9 +97,28 @@ maintains a record of how it is valid to use this symbol, as a higher-kinded typ
 is useful for type-checking. But what we want when writing code like this is _not_ every
 incomplete type, which cannot have a concrete representation (at least in our case) at
 runtime, but the complete types.
-  Even though we _say_ aliases, we really are declaring a type that needs representation. And since it has a path through the symbol table, 
-
+  Even though we _say_ aliases, we really are declaring a type that needs representation. And since it has a path through the symbol table, it's useful -- it's part of how we traverse the
+relation of symbols to other symbols quickly, until we bottom out at _base_ symbols and
+the information that is part of them. And so that's ... fairly odd, actually. Because we 
+don't want the base symbols. We don't want to follow anything anywhere; we don't care if
+something is a Product or an Alias or whatever, when we're trying to compile it. What we 
+really want is just to look at the Aliases as they really are -- A Name associated with
+other names -- and ensure these find their way into the output. An `Array Int`? A
+`Map String String`? A `Boolean`? These all find standard definitions and ways of operating
+in the target language compiler, and can have access to the SymbolTable if that's useful,
+but otherwise it should be enough to write a alias with a name and a construction of the 
+output type. 
+  But is it actually enough? No, it's not. After all, we might see an `Array (Array Int)`. That's far more than a simple string. So we have the alias an its parameter, and it is
+this data that needs to be transformed into the target language. No further processing is 
+needed; this is a perfect representation of our knowledge about the alias, when paired
+with the Symbol table.
+  What we care about with aliases is ensuring that they are, or can be, defined in the right order. They don't have to be; many languages don't care, but some do, like Clojure (if we assume a Typed Clojure). So we need to start with an Array of aliases in the order presented 
+in the original file, but provide a _sort_ function for the array, if the target language
+desires to sort.
+  Similarly, we need to handle Boundaries. Typically we place these _after_ the aliases,
+so that all types using them will definitely be declared, and since boundaries themselves
+are not actual types that can be used in other types. But how do we represent them? Well, they're already well-represented enough in the boundary table, even if they're out-of-order. But we don't need them to be in lookup tables -- we just need arrays of the data that we
+can iterate over simply, along with the names. So there's nothing special needed there.
 
 TODO -- tokenizing. TypeName and FunctionName are last ... but they also match the keywords.
 So ... will that work out? Or do they have to be merged?
-TODO -- check for circular aliases earlier.

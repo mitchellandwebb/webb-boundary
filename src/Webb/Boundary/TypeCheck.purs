@@ -177,7 +177,9 @@ illegalMethod m = do
   return <- methodReturn m
   
   for_ args noEffectOrAff
+
   requireEffectOrAff return
+  for_ (argsOf return) noEffectOrAff
   
   where
   noEffectOrAff w = do 
@@ -186,9 +188,9 @@ illegalMethod m = do
     let p = unwrap w
     name <- resolve p.name.string
     expect (name /= "Effect") 
-      "Cannot use Effect in a function parameter"
+      "Cannot use Effect here"
     expect (name /= "Aff") 
-      "Cannot use Aff in a function parameter"
+      "Cannot use Aff here"
     
     -- Recursively, even the type arguments in a function parameter cannot 
     -- use Effect or Aff. It is exclusive to the Return value.

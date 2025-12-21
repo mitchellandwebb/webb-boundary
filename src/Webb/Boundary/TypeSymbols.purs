@@ -225,6 +225,10 @@ searchFor { symbol, startingFrom: other } table =
     anyM identity (L.fromFoldable programs)
       
     
+argsOf :: P.Param -> Array P.Param
+argsOf wrapped = let
+  p = unwrap wrapped
+  in p.args
     
     
 

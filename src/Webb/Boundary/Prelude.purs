@@ -9,6 +9,7 @@ import Prelude
 
 import Data.Array as A
 import Data.String (joinWith)
+import Data.Tuple (uncurry) as P
 import Data.Tuple.Nested ((/\), type (/\)) as P
 import Parsing (ParserT)
 import Parsing as P
