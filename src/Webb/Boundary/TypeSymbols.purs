@@ -89,7 +89,7 @@ declareAlias node = do
   this <- lift mread
   let name = node.name.string
   whenM (M.member this.symbols name) do
-    throwError [ "Global symbol has already been defined: " <> name ]
+    throwError [ alreadyDefined name ]
 
   case node.target of
     AliasedParam wrapped -> do
@@ -111,6 +111,9 @@ declareAlias node = do
       pname = param.name.string
       in name /\ ALIAS pname
     in Map.fromFoldable converted
+  
+  alreadyDefined name = 
+    "Global symbol has already been defined: " <> name 
 
 getSymbols :: Prog SymbolTable
 getSymbols = do
