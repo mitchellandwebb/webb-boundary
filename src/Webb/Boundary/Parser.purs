@@ -104,24 +104,6 @@ param = try do
   lp = delim  "("
   rp = delim ")"
   
-  within a1 a2 prog = try do
-    void a1 
-    result <- prog
-    void a2
-    pure result 
-
-  -- Strips the outer delims before matching
-  strip a1 a2 prog = do
-    alts
-      [ do
-          void a1
-          result <- strip a1 a2 prog
-          void a2
-          pure result
-      , do 
-          prog
-      ]
-      
   -- A param argument. It is either a bare param, or delimited to become a top-level param
   -- again.
   paramArg _ = do
@@ -129,10 +111,7 @@ param = try do
       [ do
           name <- token Tok.TypeName
           pure $ Param_ { name, args: [] }
-
-      -- Delimiting becomes a new top-level parameter, rather than just a simple
-      -- argument.
-      , within lp rp param
+      , whenNext lp param 
       ]
 
   
