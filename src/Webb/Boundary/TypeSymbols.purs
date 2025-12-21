@@ -174,12 +174,15 @@ isProduct name table = let
       _ -> pure false
   in fromMaybe false is
 
+-- Arg count of a symbol is either a result of it being a product, or 
+-- the arg count of an aliased symbol, or the arg count 0.
 argCount :: String -> SymbolTable -> Int
 argCount name table = let 
   count = do
     entry <- Map.lookup name table
     case entry of
       PRODUCT i -> pure i
+      ALIAS next -> pure $ argCount next table
       _ -> pure 0
   in fromMaybe 0 count
 

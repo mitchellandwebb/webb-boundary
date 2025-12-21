@@ -74,7 +74,10 @@ want to write?
 data types
 interface types using the data types, expressed in the form of the language.
 
-So we need the types that need to be written, in declaration order.
-We need boundary symbols to clash with type symbols, or for boundary symbols to
-_be_ in the same symbol table ... although that's annoying.
+So we need the types that need to be written, in declaration order, so we can write
+systematically. And we need them in a form that is _interpretable_. Aliases may be Int,
+Double -- primitives that are easy to convert by looking up the target type in the target
+language. But aliases may also be product types or records. Since circularity is not allowed,
+we should observe a clear declaration path. We _should_.
+
 We need ReferM to be inherited by all the standard monad transformers.
