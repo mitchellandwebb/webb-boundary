@@ -4,7 +4,7 @@ import Prelude
 import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
-import Control.Monad.Except (ExceptT, lift, runExceptT)
+import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (StateT, evalStateT, runStateT)
 import Data.Array as A
 import Data.Either (Either)
@@ -85,7 +85,7 @@ eval env prog = prog # runExceptT >>> flip evalStateT env
   
 declareAlias :: P.Alias -> Prog Unit
 declareAlias alias = do
-  this <- lift mread
+  this <- mread
   let name = alias.name.string
   whenM (M.member this.symbols name) do
     throwError [ alreadyDefined name ]
@@ -116,7 +116,7 @@ declareAlias alias = do
 
 getSymbols :: Prog SymbolTable
 getSymbols = do
-  s <- lift mread
+  s <- mread
   aread s.symbols
 
 -- Gets all the declared symbols from the tree. These have not been validated.
@@ -125,7 +125,7 @@ getSymbols = do
 -- until after this function runs.
 readDeclaredSymbols :: Prog SymbolTable
 readDeclaredSymbols = do 
-  this <- lift mread
+  this <- mread
   liftAff do 
     allAliases this.tree $ \alias -> run this $ declareAlias alias
   getSymbols

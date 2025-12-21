@@ -775,7 +775,9 @@
         "path": "../webb-parsing"
       },
       "webb-random": "0.0.1",
-      "webb-refer": "0.0.2",
+      "webb-refer": {
+        "path": "../webb-refer"
+      },
       "webb-stateful": "0.0.2",
       "webb-test": "0.0.1",
       "webb-writer": "0.0.1"
@@ -2005,9 +2007,8 @@
       ]
     },
     "webb-refer": {
-      "type": "registry",
-      "version": "0.0.2",
-      "integrity": "sha256-c/J32ynZ0mM9uv4fx3T/uHlSKvmSDchfR3faggazBW8=",
+      "type": "local",
+      "path": "../webb-refer",
       "dependencies": [
         "effect",
         "prelude",

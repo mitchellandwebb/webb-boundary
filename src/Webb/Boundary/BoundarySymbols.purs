@@ -3,7 +3,7 @@ module Webb.Boundary.BoundarySymbols where
 import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
-import Control.Monad.Except (ExceptT, lift, runExceptT, throwError)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.State (StateT, evalStateT, runStateT)
 import Data.Either (Either)
 import Data.Foldable (for_)
@@ -72,14 +72,14 @@ getGlobalBoundaryTable tree symbols = do
 
 readBoundaries :: Prog BoundaryTable
 readBoundaries = do
-  this <- lift mread
+  this <- mread
   liftAff do
     allBoundaries this.tree \bound -> run this (addBoundary bound)
   getTable
 
 addBoundary :: P.Boundary -> Prog Unit
 addBoundary b = do 
-  this <- lift mread
+  this <- mread
   let name = b.name.string
   
   functions <- getFunctionTable b.methods
@@ -122,6 +122,6 @@ addBoundary b = do
     
 getTable :: Prog BoundaryTable
 getTable = do
-  this <- lift mread
-  lift $ aread this.table
+  this <- mread
+  aread this.table
   

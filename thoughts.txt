@@ -79,5 +79,3 @@ systematically. And we need them in a form that is _interpretable_. Aliases may 
 Double -- primitives that are easy to convert by looking up the target type in the target
 language. But aliases may also be product types or records. Since circularity is not allowed,
 we should observe a clear declaration path. We _should_.
-
-We need ReferM to be inherited by all the standard monad transformers.

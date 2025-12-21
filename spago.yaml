@@ -35,7 +35,8 @@ workspace:
   extraPackages: 
     spec-discovery: 8.2.0
     webb-test: 0.0.1
-    webb-refer: 0.0.2
+    webb-refer:
+      path: ../webb-refer
     webb-monad: 0.0.2
     webb-writer: 0.0.1
     webb-stateful: 0.0.2

@@ -74,7 +74,7 @@ runTypeCheck table tree = do
   abort :: Check Unit -> ExceptT (Array String) Check Unit
   abort prog = do
     lift prog
-    env <- lift mread
+    env <- mread
     len <- Arr.length env.errors
     if len <= 0 then
       pure unit
