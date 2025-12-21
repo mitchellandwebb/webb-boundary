@@ -65,11 +65,11 @@ resolve (CV env) name = TS.resolve name env.symbols
 
 -- If we detect a circular relation where the param refers back to the
 -- alias symbol in _any_ parts of the param (name or args), add an error.
-checkCircular :: CheckVisitor -> String -> P.Param -> Aff Unit
-checkCircular this@(CV env) name p = do
+checkCircularAlias :: CheckVisitor -> String -> P.Param -> Aff Unit
+checkCircularAlias this@(CV env) name p = do
   expect this 
     (not $ refersToSymbol name p env.symbols) 
-    $ "Type definition refers back to itself: " <> name
+    $ "Type alias refers back to itself: " <> name
 
 instance Visitor CheckVisitor where
   -- We check each parameter for existence and completeness
@@ -133,11 +133,11 @@ instance Visitor CheckVisitor where
     let name = al.name.string
     case al.target of 
       P.AliasedParam p -> do
-        checkCircular this name p
+        checkCircularAlias this name p
       P.AliasedMap m -> do
         let params = Map.values m
         for_ params \p -> do
-          checkCircular this name p
+          checkCircularAlias this name p
       
   -- Parameter-checking is covered by 'param' alone. Nothing else is needed
   -- for our use case.
