@@ -92,11 +92,49 @@ newtype Param = Param_
   
 derive instance Newtype Param _
   
+-- Int | (Int) | Array Int | Array (Int) | (Array) Int | (Array (Array Int)) | Array Array Int
 param :: Parse Param
 param = try do 
-  name <- token Tok.TypeName
-  args <- many $ param
-  pure $ Param_ { name, args }
+  strip lp rp do
+    name <- token Tok.TypeName
+    args <- many (paramArg unit)
+    pure $ Param_ { name, args }
+    
+  where
+  lp = delim  "("
+  rp = delim ")"
+  
+  within a1 a2 prog = try do
+    void a1 
+    result <- prog
+    void a2
+    pure result 
+
+  -- Strips the outer delims before matching
+  strip a1 a2 prog = do
+    alts
+      [ do
+          void a1
+          result <- strip a1 a2 prog
+          void a2
+          pure result
+      , do 
+          prog
+      ]
+      
+  -- A param argument. It is either a bare param, or delimited to become a top-level param
+  -- again.
+  paramArg _ = do
+    alts 
+      [ do
+          name <- token Tok.TypeName
+          pure $ Param_ { name, args: [] }
+
+      -- Delimiting becomes a new top-level parameter, rather than just a simple
+      -- argument.
+      , within lp rp param
+      ]
+
   
 type Alias = 
   { name :: Token

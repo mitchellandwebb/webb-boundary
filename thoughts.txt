@@ -89,8 +89,17 @@ actually ... _is_ an alias?
   An alias refers to a complete type. An alias can use _other_ aliases. Thus, an alias
 is a symbol characterized by its complete parameter, NOT any particular single name. Thus,
 it is a symbol to _multiple_ other symbols -- one for each parameter within it. In the end, the correctness of an alias is not determined by the alias itself -- if we were doing type _matching_, then yes, an alias would need to look up the other type by itself -- ALL of the other type -- to derive a concrete fully-reduced parameter. But in terms of the alias referring to a valid symbol -- that is unneeded. Parameters can be validated on their own against the symbol table in this case.
+  But in the end, there's a funny difference in the symbol table. Aliases refer to
+concrete types with the type symbols. But other symbols refer to single symbols on their
+own, that map to type-ish definitions. Thus, an Alias like `Array Int` refers to an Int,
+while `Array` refers to a `Product 1` -- it does not itself have a complete type, but 
+maintains a record of how it is valid to use this symbol, as a higher-kinded type. This
+is useful for type-checking. But what we want when writing code like this is _not_ every
+incomplete type, which cannot have a concrete representation (at least in our case) at
+runtime, but the complete types.
+  Even though we _say_ aliases, we really are declaring a type that needs representation. And since it has a path through the symbol table, 
+
 
 TODO -- tokenizing. TypeName and FunctionName are last ... but they also match the keywords.
 So ... will that work out? Or do they have to be merged?
-TODO -- parsing -- what about (Array (Array Int))? Is that handled correctly?
 TODO -- check for circular aliases earlier.
