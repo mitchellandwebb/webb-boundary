@@ -68,7 +68,7 @@ resolve (CV env) name = TS.resolve name env.symbols
 checkCircular :: CheckVisitor -> String -> P.Param -> Aff Unit
 checkCircular this@(CV env) name p = do
   expect this 
-    (not $ isCircular name p env.symbols) 
+    (not $ refersToSymbol name p env.symbols) 
     $ "Type definition refers back to itself: " <> name
 
 instance Visitor CheckVisitor where

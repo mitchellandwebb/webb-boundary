@@ -176,8 +176,8 @@ argCount name table = let
       _ -> pure 0
   in fromMaybe 0 count
 
--- Resolve the type symbol to another a final type, ignoring all
--- aliases
+-- Resolve the type symbol to another final type, ignoring all
+-- aliases. CANNOT handle circular aliases that refer to themselves.
 resolve :: String -> SymbolTable -> String
 resolve name table = fromMaybe "unknown" do
   entry <- Map.lookup name table
@@ -189,8 +189,35 @@ resolve name table = fromMaybe "unknown" do
       -- Any other type resolves to its own symbol name.
       pure name
       
--- Check for circular types. We don't necessarily have to err, but
--- we do have to _be able_ to check if we're circular.
-isCircular :: String -> P.Param -> SymbolTable -> Boolean
-isCircular name wrapped table = true
+-- Check for a reference to the symbol within the parameter, or the parameters
+-- arguments.
+refersToSymbol :: String -> P.Param -> SymbolTable -> Boolean
+refersToSymbol name wrapped table = 
+  let
+  param = unwrap wrapped
+  pname = param.name.string
+  args = param.args
+  found = searchFor_ { symbol: name, startingFrom: pname }
+  in if found then
+    true
+  else 
+    A.any refersToMe args
+  where
+  searchFor_ args = searchFor args table
+  refersToMe childParam = refersToSymbol name childParam table
+
+searchFor :: 
+  { symbol :: String, startingFrom :: String} -> SymbolTable -> Boolean
+searchFor { symbol, startingFrom: other } table =
+  if symbol == other then 
+    true
+  else 
+    fromMaybe false do
+      entry <- Map.lookup other table
+      case entry of
+        ALIAS next -> do 
+          pure $ searchFor { symbol, startingFrom: next } table
+        _ -> pure false
+    
+
     
