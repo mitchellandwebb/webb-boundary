@@ -12,7 +12,7 @@ import Data.Foldable (for_)
 import Data.Map as Map
 import Data.Newtype (unwrap)
 import Effect.Aff (Aff, throwError)
-import Effect.Aff.Class (liftAff)
+import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Webb.Boundary.Parser as P
 import Webb.Boundary.TypeSymbols as TS
@@ -52,11 +52,11 @@ type Env =
   
 type Check = StateT Env Aff
 
-run :: Env -> Check Unit -> Aff Unit
-run env prog = do evalStateT prog env
+run :: forall m. MonadAff m => Env -> Check Unit -> m Unit
+run env prog = liftAff do evalStateT prog env
 
-eval :: forall a. Env -> Check a -> Aff a
-eval env prog = do evalStateT prog env
+eval :: forall m a. MonadAff m => Env -> Check a -> m a
+eval env prog = liftAff do evalStateT prog env
 
 runTypeCheck :: SymbolTable -> Tree -> Aff (Either (Array String) Unit)
 runTypeCheck table tree = do 
@@ -196,7 +196,7 @@ illegalMethod m = do
     let p = unwrap w
     name <- resolve p.name.string
     expect (name == "Effect" || name == "Aff")
-       $ "Function return type must be Aff or Effect"
+      "Function return type must be Aff or Effect"
 
 methodParams :: forall m. MonadEffect m => P.Method -> m (Array P.Param)
 methodParams method = liftEffect do
