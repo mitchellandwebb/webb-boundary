@@ -70,5 +70,53 @@ visit visitor tree = case tree of
     let values = Map.values t
     for_ values visitParam
         
+newtype GeneralVisitor = GV GV_
 
+type GV_ = 
+  { boundary :: P.Boundary -> Aff Unit
+  , method :: P.Method -> Aff Unit
+  , param :: P.Param -> Aff Unit
+  , alias :: P.Alias -> Aff Unit
+  , typeMap :: P.TypeMap -> Aff Unit
+  }
 
+default :: GV_
+default =
+  { boundary: \_ -> pure unit
+  , method : \_ -> pure unit
+  , param : \_ -> pure unit
+  , alias: \_ -> pure unit
+  , typeMap : \_ -> pure unit
+  }
+
+instance Visitor GeneralVisitor where
+  boundary (GV s) = s.boundary
+  method (GV s) = s.method
+  param (GV s) = s.param
+  alias (GV s) = s.alias
+  typeMap (GV s) = s.typeMap
+  
+allBoundaries :: Tree -> (P.Boundary -> Aff Unit) -> Aff Unit
+allBoundaries tree prog = do
+  let v = GV $ default { boundary = prog }
+  visit v tree
+
+allMethods :: Tree -> (P.Method -> Aff Unit) -> Aff Unit
+allMethods tree prog = do
+  let v = GV $ default { method = prog }
+  visit v tree
+
+allParams :: Tree -> (P.Param -> Aff Unit) -> Aff Unit
+allParams tree prog = do
+  let v = GV $ default { param = prog }
+  visit v tree
+
+allAliases :: Tree -> (P.Alias -> Aff Unit) -> Aff Unit
+allAliases tree prog = do
+  let v = GV $ default { alias = prog }
+  visit v tree
+
+allTypeMaps :: Tree -> (P.TypeMap -> Aff Unit) -> Aff Unit
+allTypeMaps tree prog = do
+  let v = GV $ default { typeMap = prog }
+  visit v tree
