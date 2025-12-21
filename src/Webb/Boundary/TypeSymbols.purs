@@ -21,7 +21,6 @@ import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
 
 
-
 {- Define the basic symbols in the global space, and their type representations. If we do _nominal_ type-checking, this is easy -- each type is just represented by a simple integer or string, and types are the same as long as they refer to the same value. There is no need, when doing type-checking, to do any structural comparisons. 
 
 In our case, we do allow structural comparisons of record types, but boundary types are NOT allowed to be reused in concrete types.
