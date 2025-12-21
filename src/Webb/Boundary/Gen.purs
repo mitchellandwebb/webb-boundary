@@ -139,10 +139,11 @@ aliasTierList table = localEffect do
           nameScore = rootLength pname score' :: Int
           argNames = param.args <#> paramName :: Array String
           argScores = (argNames <#> \argName -> rootLength argName score') :: Array Int
-          
+          allScores = [ nameScore ] <> argScores :: Array Int
+
         -- The longest length is how far the param is from the root in _any_ of
         -- its symbols.
-        max :: Int <- maximum $ [ nameScore ] <> argScores
+        max :: Int <- maximum allScores
         pure max
       _ -> do 
         pure score  -- Anything else terminates the search
