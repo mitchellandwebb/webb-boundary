@@ -150,6 +150,9 @@ typeCheckParam wrapped = do
   nameExists name -- Does it refer to a valid existing type?
   argCountIsCorrect name args -- Is that type completed by the args?
   
+  -- Note that any child params are handled by the visitor. We don't need
+  -- to recurse here.
+  
   where
   nameExists name = do
     self <- mread

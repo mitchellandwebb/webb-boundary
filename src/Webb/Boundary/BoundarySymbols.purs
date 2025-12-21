@@ -8,11 +8,13 @@ import Control.Monad.State (StateT, evalStateT, runStateT)
 import Data.Either (Either)
 import Data.Foldable (for_)
 import Data.Map (Map)
+import Data.Map as Map
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
 import Webb.Boundary.Parser as P
 import Webb.Boundary.Tokens (Token)
 import Webb.Boundary.TypeCheck (methodParams, methodReturn)
+import Webb.Boundary.TypeSymbols (SymbolTable)
 import Webb.Stateful (localEffect)
 import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
@@ -42,6 +44,7 @@ type Concrete = P.Param
 
 type Env = 
   { tree :: Tree
+  , symbols :: SymbolTable
   , table :: MapColl String BoundaryEntry
   }
   
@@ -54,11 +57,12 @@ eval :: forall a. Env -> Prog a -> Aff (Either (Array String) a)
 eval env prog = prog # runExceptT >>> flip evalStateT env
 
 -- Get the table of all boundaries, and their methods.
-getGlobalBoundaryTable :: Tree -> Aff (Either (Array String) BoundaryTable)
-getGlobalBoundaryTable tree = do 
+getGlobalBoundaryTable :: 
+  Tree -> SymbolTable -> Aff (Either (Array String) BoundaryTable)
+getGlobalBoundaryTable tree symbols = do 
   table <- newMap
   let 
-    env = { table, tree } :: Env
+    env = { table, tree, symbols } :: Env
     prog = do
       -- There's only one source of boundaries, and no global ones. 
       -- So reading boundaries, and throwing on error, is enough.
@@ -84,8 +88,13 @@ addBoundary b = do
         , name: b.name
         } :: BoundaryEntry
   
+  -- Cannot clash with an existing boundary.
   whenM (M.member this.table name) do
-    throwError $ [ "Boundary has already been defined: " <> name ]
+    throwError $ [ alreadyDefined name ]
+    
+  -- Cannot clash with an existing type.
+  when (Map.member name this.symbols) do 
+    throwError $ [ alreadyDefined name ]
     
   M.insert this.table name entry
   
@@ -107,6 +116,9 @@ addBoundary b = do
       M.insert fmap name entry
 
     aread fmap
+    
+  alreadyDefined name = 
+     "Boundary has already been defined: " <> name 
     
 getTable :: Prog BoundaryTable
 getTable = do

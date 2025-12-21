@@ -60,3 +60,21 @@ that we've visited this type before and err with a circular type.
 
 One interesting point, though, is circular types -- or rather, recursive types. How can a type ultimately refer to itself? What does that require? The problem is that when a type refers to itself is it well-typed? Well, that depends. In a simple type like a Record -- _no_ . The type is recursive and thus cannot terminate. Although it is _typable_, it is not constructable except by recursive loop. If the type has _alternatives_ that might terminate, then it is possible. But in theory, nothing is 
 wrong with recursive types -- it is, in theory, a valid, terminated type that will simply be impossible to construct at runtime. This differs between Purescript and Kot Kotlin of the implicit _pure references_, and also whether a value is _required_ at runtime -- but it's certainly true that we can obtain subtle construction bugs as a result. Preventing the bare circular type does prevent recursion in a bunch of cases, but naturally, not all.
+
+------------------------------
+
+Okay. So we have the ability to construct the symbol table, and to check the boundaries and their functions for correctness against the existing symbols and their types. So ... now what? How do we go about generating final files? And do we 
+even want to do the generation here? What would make the generation pleasant, and how do we know what to generate? How much distance is there from the Tree, or from a Symbol Table, or whatever, to the file that we want to generate? And in what steps should we try to bridge that distance?
+
+It would seem the parse tree itself ... is not sufficient. Type aliases aren't a great way for us to figure what needs to go where. But there is a 1-1 correspondence between alias and construct in most languages. So ... maybe?
+
+After all, what did type-checking accomplish? It told us that the structure of the parse tree also correctly represents intent. But what is the intent that we actually
+want to write?
+
+data types
+interface types using the data types, expressed in the form of the language.
+
+So we need the types that need to be written, in declaration order.
+We need boundary symbols to clash with type symbols, or for boundary symbols to
+_be_ in the same symbol table ... although that's annoying.
+We need ReferM to be inherited by all the standard monad transformers.
