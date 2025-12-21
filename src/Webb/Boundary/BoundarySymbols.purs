@@ -3,16 +3,16 @@ module Webb.Boundary.BoundarySymbols where
 import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
-import Data.Array as A
+import Control.Monad.Except (ExceptT, lift, runExceptT, throwError)
+import Control.Monad.State (StateT, evalStateT, runStateT)
 import Data.Either (Either)
 import Data.Foldable (for_)
 import Data.Map (Map)
-import Effect (Effect)
 import Effect.Aff (Aff)
+import Effect.Aff.Class (liftAff)
 import Webb.Boundary.Parser as P
 import Webb.Boundary.Tokens (Token)
 import Webb.Boundary.TypeCheck (methodParams, methodReturn)
-import Webb.Monad.Prelude (forceMaybe', throwString)
 import Webb.Stateful (localEffect)
 import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
@@ -40,72 +40,76 @@ type FunctionEntry =
   
 type Concrete = P.Param
 
+type Env = 
+  { tree :: Tree
+  , table :: MapColl String BoundaryEntry
+  }
+  
+type Prog = ExceptT (Array String) (StateT Env Aff) 
+
+run :: Env -> Prog Unit -> Aff Unit
+run env prog = void $ prog # runExceptT >>> flip runStateT env
+
+eval :: forall a. Env -> Prog a -> Aff (Either (Array String) a)
+eval env prog = prog # runExceptT >>> flip evalStateT env
+
 -- Get the table of all boundaries, and their methods.
 getGlobalBoundaryTable :: Tree -> Aff (Either (Array String) BoundaryTable)
 getGlobalBoundaryTable tree = do 
-  table <- readBoundaries tree
-  
-  -- There are no other boundaries defined elsewhere. So no need to compare them
-  -- to anything besides what is in this file.
-  pure $ pure table
+  table <- newMap
+  let 
+    env = { table, tree } :: Env
+    prog = do
+      -- There's only one source of boundaries, and no global ones. 
+      -- So reading boundaries, and throwing on error, is enough.
+      readBoundaries
 
-readBoundaries :: Tree -> Aff BoundaryTable
-readBoundaries tree = do
-  v <- newBoundaryVisitor
-  visit v tree
-  getTable v
-  
-newtype BoundaryVisitor = BV (MapColl String BoundaryEntry)
+  eval env prog
 
-instance Visitor BoundaryVisitor where
-  boundary (BV map) b = do 
-    let 
-      name = b.name.string
-      entry = 
-        { functions: localEffect do getFunctionTable b.methods
+readBoundaries :: Prog BoundaryTable
+readBoundaries = do
+  this <- lift mread
+  liftAff do
+    allBoundaries this.tree \bound -> run this (addBoundary bound)
+  getTable
+
+addBoundary :: P.Boundary -> Prog Unit
+addBoundary b = do 
+  this <- lift mread
+  let name = b.name.string
+  
+  functions <- getFunctionTable b.methods
+  let entry = 
+        { functions
         , name: b.name
         } :: BoundaryEntry
-    
-    whenM (M.member map name) do
-      throwString $ "Boundary has already been defined: " <> name
-      
-    M.insert map name entry
-    
-    where 
-    getFunctionTable :: Array P.Method -> Effect FunctionTable
-    getFunctionTable methods = do
-      fmap <- newMap
-      for_ methods \method -> do
-        let 
-          name = method.name.string
-          entry = 
-            { name: method.name
-            , params: localEffect $ getParams method
-            , return: localEffect $ getReturn method
-            } :: FunctionEntry
-        
-        whenM (M.member fmap name) do
-          throwString $ "Function has already been defined: " <> name
-        M.insert fmap name entry
-
-      aread fmap
-      
-    getParams :: P.Method -> Effect (Array P.Param)
-    getParams = methodParams
-      
-    getReturn :: P.Method -> Effect P.Param
-    getReturn = methodReturn
-
-  method = defaultMethod
-  param = defaultParam
-  alias = defaultAlias
-  typeMap = defaultTypeMap
-
-newBoundaryVisitor :: Aff BoundaryVisitor
-newBoundaryVisitor = do
-  map <- newMap
-  pure $ BV map
   
-getTable :: BoundaryVisitor -> Aff BoundaryTable
-getTable (BV s) = aread s
+  whenM (M.member this.table name) do
+    throwError $ [ "Boundary has already been defined: " <> name ]
+    
+  M.insert this.table name entry
+  
+  where 
+  getFunctionTable :: Array P.Method -> Prog FunctionTable
+  getFunctionTable methods = do
+    fmap <- newMap
+    for_ methods \method -> do
+      let 
+        name = method.name.string
+        entry = 
+          { name: method.name
+          , params: localEffect $ methodParams method
+          , return: localEffect $ methodReturn method
+          } :: FunctionEntry
+      
+      whenM (M.member fmap name) do
+        throwError [ "Function has already been defined: " <> name ]
+      M.insert fmap name entry
+
+    aread fmap
+    
+getTable :: Prog BoundaryTable
+getTable = do
+  this <- lift mread
+  lift $ aread this.table
   

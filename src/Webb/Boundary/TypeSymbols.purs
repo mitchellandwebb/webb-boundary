@@ -85,13 +85,13 @@ eval :: forall a. Env -> Prog a -> Aff (Either (Array String) a)
 eval env prog = prog # runExceptT >>> flip evalStateT env
   
 declareAlias :: P.Alias -> Prog Unit
-declareAlias node = do
+declareAlias alias = do
   this <- lift mread
-  let name = node.name.string
+  let name = alias.name.string
   whenM (M.member this.symbols name) do
     throwError [ alreadyDefined name ]
 
-  case node.target of
+  case alias.target of
     AliasedParam wrapped -> do
       let 
         p = unwrap wrapped
