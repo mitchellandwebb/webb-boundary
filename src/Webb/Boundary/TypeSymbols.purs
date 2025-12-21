@@ -4,6 +4,8 @@ import Prelude
 import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
+import Control.Monad.Except (ExceptT, lift, runExceptT)
+import Control.Monad.State (StateT, evalStateT, runStateT)
 import Data.Array as A
 import Data.Either (Either)
 import Data.Map (Map)
@@ -12,9 +14,9 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.Tuple (uncurry)
 import Effect.Aff (Aff, throwError)
+import Effect.Aff.Class (liftAff)
 import Webb.Boundary.Parser (AliasTarget(..), TypeMap)
 import Webb.Boundary.Parser as P
-import Webb.Monad.Prelude (throwString)
 import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
 
@@ -38,15 +40,18 @@ type SymbolTable = Map String SymbolType
 
 getGlobalSymbolTable :: Tree -> Aff (Either (Array String) SymbolTable)
 getGlobalSymbolTable tree = do
-  let predefined = default
-  defined <- readDeclaredSymbols tree
+  table <- newMap
   let 
-    either = do
+    env = { tree, symbols: table } :: Env
+    predefined = default
+    prog = do
+      defined <- readDeclaredSymbols
       noRedefinedSymbols predefined defined
       let combined = Map.union predefined defined
       noDanglingAliases combined
       pure combined
-  pure either
+
+  eval env prog
 
 default :: SymbolTable
 default = Map.fromFoldable
@@ -66,94 +71,94 @@ default = Map.fromFoldable
   , "Aff" /\ PRODUCT 1
   ]
   
-newtype SymbolVisitor = SV 
+type Env = 
   { symbols :: MapColl String SymbolType
-
+  , tree :: Tree
   }
   
-instance Visitor SymbolVisitor where
-  alias (SV v) node = do
-    let name = node.name.string
-    whenM (M.member v.symbols name) do
-      throwString $ "Global symbol has already been defined: " <> name
-
-    case node.target of
-      AliasedParam wrapped -> do
-        let 
-          p = unwrap wrapped
-          pname = p.name.string
-        M.insert v.symbols name (ALIAS pname)
-      AliasedMap m -> do
-        M.insert v.symbols name (RECORD $ convert m)
-        
-    where
-    convert :: TypeMap -> Map String SymbolType
-    convert map = let 
-      pairs = Map.toUnfoldable map :: Array _
-      converted = pairs <#> uncurry \token wrapped -> 
-        let
-        param = unwrap wrapped
-        name = token.string
-        pname = param.name.string
-        in name /\ ALIAS pname
-      in Map.fromFoldable converted
-        
-  boundary = defaultBoundary
-  method = defaultMethod
-  param = defaultParam
-  typeMap = defaultTypeMap
-
-newSymbolVisitor :: Aff SymbolVisitor
-newSymbolVisitor = do
-  syms <- newMap
-  pure $ SV { symbols: syms }
+type Prog = ExceptT (Array String) (StateT Env Aff)
   
-getSymbols :: SymbolVisitor -> Aff SymbolTable
-getSymbols (SV s) = do
+run :: Env -> Prog Unit -> Aff Unit
+run env prog = void $ prog # runExceptT >>> flip runStateT env
+
+eval :: forall a. Env -> Prog a -> Aff (Either (Array String) a)
+eval env prog = prog # runExceptT >>> flip evalStateT env
+  
+declareAlias :: P.Alias -> Prog Unit
+declareAlias node = do
+  this <- lift mread
+  let name = node.name.string
+  whenM (M.member this.symbols name) do
+    throwError [ "Global symbol has already been defined: " <> name ]
+
+  case node.target of
+    AliasedParam wrapped -> do
+      let 
+        p = unwrap wrapped
+        pname = p.name.string
+      M.insert this.symbols name (ALIAS pname)
+    AliasedMap m -> do
+      M.insert this.symbols name (RECORD $ convert m)
+      
+  where
+  convert :: TypeMap -> Map String SymbolType
+  convert map = let 
+    pairs = Map.toUnfoldable map :: Array _
+    converted = pairs <#> uncurry \token wrapped -> 
+      let
+      param = unwrap wrapped
+      name = token.string
+      pname = param.name.string
+      in name /\ ALIAS pname
+    in Map.fromFoldable converted
+
+getSymbols :: Prog SymbolTable
+getSymbols = do
+  s <- lift mread
   aread s.symbols
 
 -- Gets all the declared symbols from the tree. These have not been validated.
 -- If a symbol appears twice, since there are no scopes at the top-level, we error.
 -- But aliases are not yet checked for existence, since we don't have all symbols 
 -- until after this function runs.
-readDeclaredSymbols :: Tree -> Aff SymbolTable
-readDeclaredSymbols tree = do 
-  v <- newSymbolVisitor
-  visit v tree 
-  getSymbols v
+readDeclaredSymbols :: Prog SymbolTable
+readDeclaredSymbols = do 
+  this <- lift mread
+  liftAff do 
+    allAliases this.tree $ \alias -> run this $ declareAlias alias
+  getSymbols
   
 -- Check for redefinitions of old symbols in the new table, and publishes errors.
-noRedefinedSymbols :: SymbolTable -> SymbolTable -> Either (Array String) Unit
-noRedefinedSymbols old new = 
+noRedefinedSymbols :: SymbolTable -> SymbolTable -> Prog Unit
+noRedefinedSymbols old new = do
   let 
-  shared = Map.intersection old new
-  pairs = Map.toUnfoldable shared
-  errors = pairs <#> uncurry \name _ ->  
-    "Illegally redefines an existing type: " <> name
-  in 
-  if errors == [] then do
+    shared = Map.intersection old new
+    pairs = Map.toUnfoldable shared
+    errors = pairs <#> uncurry \name _ -> illegal name
+  when (errors == []) do
     throwError errors
-  else do 
-    pure unit
+  
+  where 
+  illegal name = "Illegally redefines an existing type: " <> name
     
 -- Checks that all aliases refer to existing symbols in the table
-noDanglingAliases :: SymbolTable -> Either (Array String) Unit
-noDanglingAliases symbols = 
+noDanglingAliases :: SymbolTable -> Prog Unit
+noDanglingAliases symbols = do
   let
-  pairs = Map.toUnfoldable symbols
-  errors = A.catMaybes $ pairs <#> uncurry \name entry -> 
-    case entry of 
-      ALIAS target -> 
-        if Map.member target symbols then 
-          Nothing
-        else 
-          Just $ "Alias " <> name <> " refers to undefined symbol " <> target
-      _ -> Nothing
-  in 
-  if errors == [] then do
+    pairs = Map.toUnfoldable symbols
+    errors = A.catMaybes $ pairs <#> uncurry \name entry -> 
+      case entry of 
+        ALIAS target -> 
+          if Map.member target symbols then 
+            Nothing
+          else 
+            Just $ undefined name target
+        _ -> Nothing
+  when (errors == []) do
     throwError errors
-  else do
-    pure unit
+  where 
+  undefined name target = 
+    "Alias " <> name <> " refers to undefined symbol " <> target
 
 typeExists :: String -> SymbolTable -> Boolean
 typeExists name = Map.member name
