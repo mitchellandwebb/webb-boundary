@@ -4,6 +4,7 @@ import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
 import Data.Array as Array
+import Data.Either (Either)
 import Data.Foldable (for_, maximum)
 import Data.Foldable as Trav
 import Data.Map (Map)
@@ -13,7 +14,8 @@ import Data.Newtype (unwrap)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Tuple (fst, snd)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, throwError)
+import Webb.Boundary.BoundarySymbols (BoundaryTable)
 import Webb.Boundary.Parser as P
 import Webb.Boundary.TypeCheck (methodParams, methodReturn)
 import Webb.Boundary.TypeSymbols (SymbolTable, SymbolType(..))
@@ -26,6 +28,23 @@ import Webb.Stateful.MapColl as MC
 
 {- Define the data structures and functions that will be used by generators to build code.
 -}
+
+type GenEnv = 
+  { symbols :: SymbolTable
+  , boundaries :: BoundaryTable
+  , writable ::
+    { aliases :: Array Alias
+    , boundaries :: Array Boundary
+    }
+  }
+  
+-- Either we are ready to generate, or we got errors
+buildEnv :: String -> Aff (Either (Array String) GenEnv)
+buildEnv file = do
+  -- TODO -- we parse the file, perform checks on it, and then get the writable
+  -- aliases and boundaries
+  pure $ throwError []
+
 
 type Alias = String /\ AliasTarget
 
@@ -143,10 +162,9 @@ aliasTierList table = localEffect do
 
         -- The longest length is how far the param is from the root in _any_ of
         -- its symbols.
-        max :: Int <- maximum allScores
-        pure max
+        maximum allScores
       _ -> do 
-        pure score  -- Anything else terminates the search
+        pure score  -- Anything else terminates the search; we reached the root.
 
   paramName :: P.Param -> String
   paramName wrapped = wrapped # unwrap >>> _.name.string
