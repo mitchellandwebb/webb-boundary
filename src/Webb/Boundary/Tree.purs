@@ -21,8 +21,8 @@ data Tree
   | ABoundary Boundary
   | AnAlias Alias
   
-parseTree :: P.Parse Tree
-parseTree = do
+treeParser :: P.Parse Tree
+treeParser = do
   trees <- mix [ ABoundary <$> P.boundary, AnAlias <$> P.alias ]
   pure $ Document trees
   

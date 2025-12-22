@@ -119,6 +119,14 @@ lookup sym = unwrap >>> _.map >>> Map.lookup sym
 declarations :: SymbolTable -> Array Alias
 declarations = unwrap >>> _.array
 
+aliases :: SymbolTable -> Array Alias
+aliases table = let 
+  types' = types table
+  maliases = types' <#> case _ of 
+    ALIAS alias -> Just alias
+    _ -> Nothing
+  in Array.catMaybes maliases
+
 symbols :: SymbolTable -> Set String
 symbols = unwrap >>> _.map >>> Map.keys
 
@@ -264,9 +272,9 @@ newTierList table = localEffect do
     maliases = pairs' <#> uncurry \name val -> case val of
       ALIAS _ -> Just name
       _ -> Nothing
-    aliases = Array.catMaybes maliases :: Array String
+    aliases' = Array.catMaybes maliases :: Array String
     
-  Fold.for_ aliases \name -> do
+  Fold.for_ aliases' \name -> do
     let score = rootLength name 0
     MapColl.update tiers score (Set.singleton name) (Set.insert name)
   

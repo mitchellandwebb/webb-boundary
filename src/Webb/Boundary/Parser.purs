@@ -2,9 +2,15 @@ module Webb.Boundary.Parser where
 
 import Webb.Boundary.Prelude
 
+import Data.Either (Either(..))
 import Data.List (List)
+import Data.List as List
 import Data.Map as Map
+import Effect.Aff (Aff)
+import Parsing as P
 import Parsing.Token as T
+import Webb.Boundary.Data.Alias (Alias)
+import Webb.Boundary.Data.Alias as Alias
 import Webb.Boundary.Data.Boundary (Boundary)
 import Webb.Boundary.Data.Boundary as Bound
 import Webb.Boundary.Data.Method (Method)
@@ -13,12 +19,20 @@ import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.Param as Param
 import Webb.Boundary.Data.Token (Token, TokenKind)
 import Webb.Boundary.Data.Token as Tok
-import Webb.Boundary.Data.Alias (Alias)
-import Webb.Boundary.Data.Alias as Alias
 import Webb.Boundary.Data.TypeMap (TypeMap)
 import Webb.Boundary.Data.TypeMap as TypeMap
 
 type Parse = Parser (List Token)
+
+parseTokens :: forall a. Array Token -> Parse a -> Aff (Either String a)
+parseTokens tokens prog = do
+  let stream = List.fromFoldable tokens
+  case P.runParser stream prog of
+    Left (P.ParseError msg pos) -> do
+      let msg' = show pos <> " " <> msg
+      pure $ Left msg'
+    Right result -> do
+      pure $ Right result
 
 -- Get the next token.
 next :: Parse Token

@@ -3,115 +3,87 @@ module Webb.Boundary.Gen where
 import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
+import Control.Monad.Except (ExceptT, runExceptT)
 import Data.Array as Array
-import Data.Either (Either)
-import Data.Foldable (for_)
-import Data.Map (Map)
-import Data.Map as Map
+import Data.Either (Either(..))
 import Effect.Aff (Aff, throwError)
-import Webb.Boundary.Data.BoundaryTable (BTable)
+import Effect.Aff.Class (liftAff)
+import Webb.Boundary.BoundarySymbols as BSymbols
+import Webb.Boundary.Data.Alias (Alias)
 import Webb.Boundary.Data.Alias as Alias
-import Webb.Boundary.Data.Boundary as Bound
-import Webb.Boundary.Data.Method as Method
-import Webb.Boundary.Data.Param as Param
-import Webb.Boundary.Data.SymbolTable (SymbolTable)
-import Webb.Boundary.Data.SymbolTable as SymbolTable
-import Webb.Boundary.Data.Token as Token
-import Webb.Boundary.Data.TypeMap as TypeMap
+import Webb.Boundary.Data.Boundary (Boundary)
+import Webb.Boundary.Data.BoundaryTable (BTable)
+import Webb.Boundary.Data.BoundaryTable as BTable
+import Webb.Boundary.Data.SymbolTable (STable)
+import Webb.Boundary.Data.SymbolTable as STable
+import Webb.Boundary.Parser as Parser
+import Webb.Boundary.Tokens as Tokens
+import Webb.Boundary.Tree as Tree
+import Webb.Boundary.TypeCheck as TypeCheck
+import Webb.Boundary.TypeSymbols as TypeSymbols
 import Webb.Monad.Prelude (forceMaybe')
 import Webb.Stateful (localEffect)
-import Webb.Stateful.ArrayColl (ArrayColl, newArray)
-import Webb.Stateful.ArrayColl as Arr
 
 
 {- Define the data structures and functions that will be used by generators to build code.
 -}
 
-type GenEnv = 
-  { symbols :: SymbolTable
+type Env = 
+  { symbols :: STable
   , boundaries :: BTable
-  , writable ::
-    { aliases :: Array GenAlias
-    , boundaries :: Array GenBoundary
-    }
+  , tree :: Tree
   }
   
--- Either we are ready to generate, or we got errors
-buildEnv :: String -> Aff (Either (Array String) GenEnv)
-buildEnv file = do
-  -- TODO -- we parse the file, perform checks on it, and then get the writable
-  -- aliases and boundaries
-  pure $ throwError []
+-- Either we are ready to generate, or we obtain errors.
+buildEnv :: String -> Aff (Either (Array String) Env)
+buildEnv file = runExceptT do
+  tokens <- Tokens.tokens file
+  tree <- abort' $ Parser.parseTokens tokens Tree.treeParser
+  symbols <- abort $ TypeSymbols.buildSymbolTable tree
+  boundaries <- abort $ BSymbols.buildBoundaryTable tree symbols
+  _ <- abort $ TypeCheck.runTypeCheck symbols tree
+  let env = { tree, symbols, boundaries }
+  pure env
 
+type Prog = ExceptT (Array String) Aff 
 
-type GenAlias = String /\ GenAliasTarget
+abort' :: forall a. Aff (Either String a) -> Prog a
+abort' prog = do
+  either <- liftAff prog
+  case either of
+    Left s -> do throwError [s]
+    Right a -> pure a
 
--- Is this useful? Only sort-of, because parameters will refer to aliases ... which
--- will take us back to normal RecordMaps.
-data GenAliasTarget = AliasMap GenTypeMap | AliasParam Param.Param
+abort :: forall a. Aff (Either (Array String) a) -> Prog a
+abort prog = do
+  either <- liftAff prog
+  case either of
+    Left errors -> do throwError errors
+    Right a -> pure a
 
-type GenBoundary = String /\ Array FnDef
+-- From the environment, obtain an array of the declared aliases
+getAliases :: Env -> Aff (Array Alias)
+getAliases env = do
+  let aliases = STable.aliases env.symbols
+  pure aliases
 
-type GenTypeMap = Map String Param.Param
-
-type FnDef = 
-  { name :: String
-  , args :: Array Param.Param
-  , return :: Param.Param
-  }
+-- Get the boundaries. We can iterate over the data type using the contained knowledge, 
+-- to get all the data we need to write the data.
+getBoundaries :: Env -> Aff (Array Boundary)
+getBoundaries env = do
+  let bounds = BTable.boundaries env.boundaries
+  pure bounds
   
-getAliases :: Tree -> Aff (Array GenAlias)
-getAliases tree = do
-  arr <- newArray
-  allAliases tree \alias -> addAlias arr alias
-  aread arr
-  
-  where
-  addAlias arr alias = do
-    let name = Alias.name alias
-    case Alias.target alias of
-      Alias.AliasedParam p -> do
-        Arr.addLast arr $ name /\ AliasParam p
-      Alias.AliasedMap m -> do
-        Arr.addLast arr $ name /\ AliasMap (convert m)
-        
-  convert map = let
-    pairs = TypeMap.pairs map
-    converted = pairs <#> uncurry \token param -> Token.text token /\ param
-    in Map.fromFoldable converted
-
-getBoundaries :: Tree -> Aff (Array GenBoundary)
-getBoundaries tree = do
-  boundArray <- newArray
-  allBoundaries tree \b -> addBound boundArray b
-  aread boundArray
-  
-  where
-  addBound :: ArrayColl GenBoundary -> Bound.Boundary -> _
-  addBound boundArray b = do
-    let name = Bound.name b
-    defArray <- newArray
-    for_ (Bound.methods b) \m -> addDef defArray m
-    
-    defs <- aread defArray
-    Arr.addLast boundArray $ name /\ defs
-    
-  addDef defArray m = do
-    let name = Method.name m
-        args = Method.firstParams m
-        return = Method.returnParam m
-    Arr.addLast defArray { name, args, return }
-
 -- Sort the aliases in order of their dependency on each other. Aliases with
 -- fewer dependencies will come first. This is useful if the generated code
 -- requires earlier types to be earlier in the file.
-sortAliases :: SymbolTable -> Array GenAlias -> Array GenAlias
+sortAliases :: STable -> Array Alias -> Array Alias
 sortAliases table arr = let
-  tierList = SymbolTable.newTierList table
+  tierList = STable.newTierList table
   in Array.sortWith (tier tierList) arr 
   where
-  tier :: SymbolTable.AliasTierList -> GenAlias -> Int
-  tier tierList (name /\ _) = let
-    mtier = SymbolTable.tier name tierList
+  tier :: STable.AliasTierList -> Alias -> Int
+  tier tierList alias = let
+    mtier = STable.tier (Alias.name alias) tierList
     in localEffect do 
-      forceMaybe' ("Alias wasn't found in any tier: " <> show name) mtier
+      forceMaybe' ("Alias wasn't found in any tier: " <> show (Alias.name alias)) mtier

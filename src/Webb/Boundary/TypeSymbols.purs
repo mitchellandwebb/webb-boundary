@@ -21,8 +21,8 @@ import Webb.Boundary.Data.SymbolTable as STable
 In our case, we do allow structural comparisons of record types, but boundary types are NOT allowed to be reused in concrete types.
 -}
 
-getGlobalSymbolTable :: Tree -> Aff (Either (Array String) STable)
-getGlobalSymbolTable tree = do
+buildSymbolTable :: Tree -> Aff (Either (Array String) STable)
+buildSymbolTable tree = do
   table <- newShowRef STable.emptyTable
   let 
     env = { tree, symbols: table } :: Env
