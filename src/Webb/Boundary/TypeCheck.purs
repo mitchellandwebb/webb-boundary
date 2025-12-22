@@ -4,7 +4,7 @@ import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 import Webb.Boundary.TypeSymbols
 
-import Control.Monad.Except (ExceptT, lift, runExceptT)
+import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (StateT, evalStateT)
 import Data.Array as A
 import Data.Either (Either)
@@ -51,13 +51,13 @@ type Env =
   , tree :: Tree
   }
   
-type Check = StateT Env Aff
+type Prog = ExceptT (Array String) (StateT Env Aff)
 
-run :: forall m. MonadAff m => Env -> Check Unit -> m Unit
-run env prog = liftAff do evalStateT prog env
+run :: forall m. MonadAff m => Env -> Prog Unit -> m Unit
+run env prog = liftAff do void $ prog # runExceptT >>> flip evalStateT env
 
-eval :: forall m a. MonadAff m => Env -> Check a -> m a
-eval env prog = liftAff do evalStateT prog env
+eval :: forall m a. MonadAff m => Env -> Prog a -> m (Either (Array String) a)
+eval env prog = liftAff do prog # runExceptT >>> flip evalStateT env
 
 runTypeCheck :: SymbolTable -> Tree -> Aff (Either (Array String) Unit)
 runTypeCheck table tree = do 
@@ -68,13 +68,12 @@ runTypeCheck table tree = do
       abort $ checkCircular 
       abort $ checkTypes 
       abort $ checkIllegal 
-      
-  prog # runExceptT >>> eval env
+  prog # eval env
 
   where 
-  abort :: Check Unit -> ExceptT (Array String) Check Unit
+  abort :: Prog Unit -> Prog Unit
   abort prog = do
-    lift prog
+    prog
     env <- mread
     len <- Arr.length env.errors
     if len <= 0 then
@@ -83,36 +82,36 @@ runTypeCheck table tree = do
       errs <- aread env.errors
       throwError errs
       
-checkCircular :: Check Unit
+checkCircular :: Prog Unit
 checkCircular = do 
   this <- mread
   liftAff do
     allAliases this.tree $ \alias -> 
       run this (noCircularAlias alias)
 
-checkTypes :: Check Unit
+checkTypes :: Prog Unit
 checkTypes = do 
   this <- mread
   liftAff do 
     allParams this.tree $ \param -> 
       run this $ typeCheckParam param
 
-checkIllegal :: Check Unit
+checkIllegal :: Prog Unit
 checkIllegal = do 
   this <- mread
   liftAff do
     allMethods this.tree $ \method -> 
       run this (illegalMethod method)
 
-addError :: String -> Check Unit
+addError :: String -> Prog Unit
 addError msg = do 
   env <- mread
   Arr.addLast env.errors msg
   
-expect :: Boolean -> String -> Check Unit
+expect :: Boolean -> String -> Prog Unit
 expect success msg = do unless success do addError msg
 
-resolve :: String -> Check String
+resolve :: String -> Prog String
 resolve name = do 
   env <- mread
   let mname = SymbolTable.resolveToHigherType name env.symbols
@@ -120,7 +119,7 @@ resolve name = do
 
 -- If we detect a circular relation where the param refers back to the
 -- alias symbol in _any_ parts of the param (name or args), add an error.
-checkCircularAlias :: String -> Check Unit
+checkCircularAlias :: String -> Prog Unit
 checkCircularAlias name = do
   this <- mread
   expect (not $ SymbolTable.isCircularAlias name this.symbols)
@@ -130,11 +129,11 @@ checkCircularAlias name = do
 -- Alias definitions must not be circular. They cannot eventually refer
 -- back to themselves in their concrete type, in _any_ of the parameters.
 -- Because if they do, we can't successfully write out the type.
-noCircularAlias :: Alias -> Check Unit
+noCircularAlias :: Alias -> Prog Unit
 noCircularAlias al = checkCircularAlias $ Alias.name al
 
 -- We check each parameter for existence and completeness
-typeCheckParam :: Param -> Check Unit
+typeCheckParam :: Param -> Prog Unit
 typeCheckParam param = do
   let 
     name = Param.name param
@@ -164,7 +163,7 @@ typeCheckParam param = do
         
 -- We check each method for correct usage of types. Some usages
 -- are currently illegal.
-illegalMethod :: Method -> Check Unit
+illegalMethod :: Method -> Prog Unit
 illegalMethod m = do 
   let args = Method.firstParams m
       return = Method.returnParam m

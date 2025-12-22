@@ -8,9 +8,8 @@ import Data.Either (Either)
 import Data.Foldable (for_)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Set as Set
 import Effect.Aff (Aff, throwError)
-import Webb.Boundary.BoundarySymbols (BoundaryTable)
+import Webb.Boundary.Data.BoundaryTable (BTable)
 import Webb.Boundary.Data.Alias as Alias
 import Webb.Boundary.Data.Boundary as Bound
 import Webb.Boundary.Data.Method as Method
@@ -30,7 +29,7 @@ import Webb.Stateful.ArrayColl as Arr
 
 type GenEnv = 
   { symbols :: SymbolTable
-  , boundaries :: BoundaryTable
+  , boundaries :: BTable
   , writable ::
     { aliases :: Array GenAlias
     , boundaries :: Array GenBoundary

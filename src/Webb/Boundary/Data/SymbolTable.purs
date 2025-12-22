@@ -7,6 +7,8 @@ import Data.Array as Array
 import Data.Foldable (maximum)
 import Data.Foldable as Fold
 import Data.Generic.Rep (class Generic)
+import Data.Lens (Lens', over)
+import Data.Lens.Record (prop)
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
@@ -17,8 +19,14 @@ import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple, uncurry)
 import Data.Tuple.Nested ((/\), type (/\))
+import Effect (Effect)
+import Type.Proxy (Proxy(..))
+import Webb.Boundary.Data.Alias (Alias)
+import Webb.Boundary.Data.Alias as Alias
 import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.Param as Param
+import Webb.Boundary.Data.TypeMap as TypeMap
+import Webb.Boundary.Data.Utils (findDuplicatesWith)
 import Webb.Monad.Prelude (forceMaybe')
 import Webb.State.Prelude ((<:))
 import Webb.Stateful (localEffect)
@@ -28,82 +36,113 @@ import Webb.Stateful.MapColl as MapColl
 newtype SymbolTable = SymbolTable_ SymbolTable_
 type STable = SymbolTable
 
-type SymbolTable_ = Map String SymbolType
+type SymbolTable_ = 
+  { map :: Map String SymbolType
+  , array :: Array Alias
+  }
+
+_map :: forall a r. Lens' { map :: a | r } a
+_map = prop (Proxy :: Proxy "map")
+
+_array :: forall a r. Lens' { array :: a | r } a
+_array = prop (Proxy :: Proxy "array")
 
 derive newtype instance Eq SymbolTable
 derive newtype instance Ord SymbolTable
 derive instance Newtype SymbolTable _
 
 emptyTable :: SymbolTable
-emptyTable = wrap Map.empty
+emptyTable = wrap { map: Map.empty, array: [] }
 
 predefined :: SymbolTable
-predefined = wrap $ Map.fromFoldable
-  [ "Int" /\ INT
-  , "Number" /\ DOUBLE
-  , "Double" /\ DOUBLE
-  , "String" /\ STRING
+predefined = wrap 
+  { map: Map.fromFoldable pairs'
+  , array: []
+  }
+  where 
+  pairs' = 
+    [ "Int" /\ INT
+    , "Number" /\ DOUBLE
+    , "Double" /\ DOUBLE
+    , "String" /\ STRING
 
-  , "Array" /\ PRODUCT 1
-  , "Map" /\ PRODUCT 2
-  , "Tuple" /\ PRODUCT 2
+    , "Array" /\ PRODUCT 1
+    , "Map" /\ PRODUCT 2
+    , "Tuple" /\ PRODUCT 2
+    , "Record" /\ PRODUCT 1
+    
+    -- The complex function types must be the _return_ types of a function, but
+    -- can appear in an alias. There is no function type otherwise. The complex function
+    -- types CANNOT be arguments.
+    , "Effect" /\ PRODUCT 1
+    , "Aff" /\ PRODUCT 1
+    ]
   
-  -- The complex function types must be the _return_ types of a function, but
-  -- can appear in an alias. There is no function type otherwise. The complex function
-  -- types CANNOT be arguments.
-  , "Effect" /\ PRODUCT 1
-  , "Aff" /\ PRODUCT 1
-  ]
 
 data SymbolType 
   = INT
   | DOUBLE
   | BOOL
   | STRING
-  | RECORD (Map String SymbolType)
   | PRODUCT Int
-  | ALIAS Param
+  | ALIAS Alias
   
 derive instance Eq SymbolType
 derive instance Ord SymbolType
 derive instance Generic SymbolType _
 instance Show SymbolType where 
   show = case _ of
-    RECORD map -> show map
     x -> genericShow x
     
-addEntry :: String -> SymbolType -> SymbolTable -> SymbolTable
-addEntry sym stype table = table # unwrap >>> Map.insert sym stype >>> wrap
+_addEntry :: String -> SymbolType -> SymbolTable -> SymbolTable
+_addEntry sym stype table = 
+  table # unwrap >>> 
+    over _map (Map.insert sym stype) >>> 
+    wrap
 
-insert :: String -> SymbolType -> SymbolTable -> SymbolTable
-insert = addEntry
+_insert :: String -> SymbolType -> SymbolTable -> SymbolTable
+_insert = _addEntry
+
+addAlias :: Alias -> SymbolTable -> SymbolTable
+addAlias alias table = let 
+  t2 = (table # unwrap >>> 
+          over _array (flip Array.snoc alias) >>>
+          wrap) :: SymbolTable
+  in _insert (Alias.name alias) (ALIAS alias) t2
 
 member :: String -> SymbolTable -> Boolean
-member sym = unwrap >>> Map.member sym
+member sym = unwrap >>> _.map >>> Map.member sym
 
 lookup :: String -> SymbolTable -> Maybe SymbolType
-lookup sym = unwrap >>> Map.lookup sym
+lookup sym = unwrap >>> _.map >>> Map.lookup sym
+
+declarations :: SymbolTable -> Array Alias
+declarations = unwrap >>> _.array
 
 symbols :: SymbolTable -> Set String
-symbols = unwrap >>> Map.keys
+symbols = unwrap >>> _.map >>> Map.keys
 
 pairs :: SymbolTable -> Array (Tuple String SymbolType)
-pairs = unwrap >>> Map.toUnfoldable
+pairs = unwrap >>> _.map >>> Map.toUnfoldable
 
 types :: SymbolTable -> Array SymbolType
-types = unwrap >>> Map.values >>> Array.fromFoldable
+types = unwrap >>> _.map >>> Map.values >>> Array.fromFoldable
 
 intersection :: SymbolTable -> SymbolTable -> SymbolTable
 intersection a b = let
   a' = unwrap a
   b' = unwrap b
-  in wrap $ Map.intersection a' b'
+  newArray = a'.array <> b'.array
+  newMap = Map.intersection a'.map b'.map
+  in wrap { map: newMap, array: newArray }
 
 union :: SymbolTable -> SymbolTable -> SymbolTable
 union a b = let
   a' = unwrap a
   b' = unwrap b
-  in wrap $ Map.union a' b'
+  newArray = a'.array <> b'.array
+  newMap = Map.union a'.map b'.map
+  in wrap { map: newMap, array: newArray }
 
 argCount :: String -> SymbolTable -> Int
 argCount sym table = fromMaybe 0 do
@@ -124,13 +163,22 @@ resolveToHigherType :: String -> SymbolTable -> Maybe String
 resolveToHigherType name table = do
   entry <- lookup name table
   case entry of
-    ALIAS param -> do 
-      -- An alias resolves to a final higher type, across multiple aliases.
-      let next = Param.name param
-      resolveToHigherType next table
+    ALIAS alias -> do 
+      case Alias.target alias of
+        Alias.AliasedParam param -> do
+          -- An alias resolves to a final higher type, across multiple aliases.
+          resolveParam param
+        Alias.AliasedMap _ -> do
+          -- An aliased map is just a record
+          pure "Record"
+          
     _x -> do
       -- Any other type is already the highest type it can be.
       pure name
+    where
+    resolveParam param = do
+      let next = Param.name param
+      resolveToHigherType next table
       
 -- Determine if a symbol is related to another symbol, traveling through all
 -- names in any alias parameters if necessary.
@@ -145,8 +193,15 @@ isRelated { symbol, ancestor } table =
       case entry of
         -- We have to search all params of the alias to find out if we are
         -- referring back to ourselves.
-        ALIAS param -> do 
-          pure $ localEffect $ checkParam param
+        ALIAS alias -> do 
+          case Alias.target alias of
+            Alias.AliasedParam param -> do
+              pure $ localEffect $ checkParam param
+            Alias.AliasedMap map -> do
+              let params = TypeMap.params map
+                  programs = params <#> checkParam :: Array (Effect Boolean)
+                  anyMatch = anyM identity (List.fromFoldable programs)
+              pure $ localEffect anyMatch
         _ -> pure false
   where
   -- We search each of the params and child params, stopping when the first
@@ -172,15 +227,25 @@ isCircularAlias alias table = fromMaybe false do
   _isRelated symbol = isRelated { symbol, ancestor: alias } table
   
   _isRelatedType symType = case symType of
-    ALIAS param ->
-      let syms = Param.symbols param
-      in Array.any _isRelated syms
-      
-    -- If the alias points to a record, look through the params.
-    RECORD map -> 
-      let symbolTypes = Array.fromFoldable $ Map.values map
-      in  Array.any _isRelatedType symbolTypes
+    ALIAS al -> 
+      case Alias.target al of
+        Alias.AliasedParam param -> 
+          _isRelatedParam param 
+        Alias.AliasedMap map -> let
+          params = TypeMap.params map
+          in
+          Array.any _isRelatedParam params
     _ -> false
+
+  _isRelatedParam param = let 
+    syms = Param.symbols param
+    in Array.any _isRelated syms
+    
+-- Check for any duplicates in the alias declaration.
+duplicates :: SymbolTable -> Array Alias
+duplicates table = let 
+  decls = declarations table
+  in findDuplicatesWith Alias.name decls
     
 
 -- Use the symbol table to define a tier list of alias symbols, by finding the longest
@@ -221,20 +286,28 @@ newTierList table = localEffect do
   getScore name score = do 
     entry <- lookup name table
     case entry of 
-      ALIAS param -> do
-        let 
-          score' = score + 1 :: Int
-          pname = Param.name param
-          nameScore = rootLength pname score' :: Int
-          argNames = Param.args param <#> Param.name :: Array String
-          argScores = (argNames <#> \argName -> rootLength argName score') :: Array Int
-          allScores = [ nameScore ] <> argScores :: Array Int
+      ALIAS alias -> do
+        case Alias.target alias of
+          Alias.AliasedParam param -> do
+            getParamScore score param 
+          Alias.AliasedMap map -> do
+            let params = TypeMap.params map
+                scores = Array.catMaybes $ params <#> getParamScore score
+            maximum scores
+      _ -> do
+        pure score
 
-        -- The longest length is how far the param is from the root in _any_ of
-        -- its symbols.
-        maximum allScores
-      _ -> do 
-        pure score  -- Anything else terminates the search; we reached the root.
+  getParamScore :: Int -> Param -> Maybe Int
+  getParamScore score param = let 
+    score' = score + 1 :: Int
+    pname = Param.name param
+    nameScore = rootLength pname score' :: Int
+    argNames = Param.args param <#> Param.name :: Array String
+    argScores = (argNames <#> \argName -> rootLength argName score') :: Array Int
+    allScores = [ nameScore ] <> argScores :: Array Int
+    in
+    -- How far param is from a root node.
+    maximum allScores
 
 tier :: String -> AliasTierList -> Maybe Int
 tier alias list = let
