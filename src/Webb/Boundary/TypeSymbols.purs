@@ -5,24 +5,18 @@ import Webb.Boundary.Prelude
 import Webb.Boundary.Tree
 
 import Control.Monad.Except (ExceptT, runExceptT)
-import Control.Monad.Loops (anyM)
 import Control.Monad.State (StateT, evalStateT, runStateT)
-import Data.Array as A
+import Data.Array as Array
 import Data.Either (Either)
-import Data.List as L
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (fromMaybe)
 import Effect.Aff (Aff, throwError)
 import Effect.Aff.Class (liftAff)
-import Webb.Boundary.Data.Token as Token
-import Webb.Boundary.Data.Param (Param)
-import Webb.Boundary.Data.Param as Param
-import Webb.Stateful (localEffect)
-import Webb.Stateful.MapColl (MapColl, newMap)
-import Webb.Stateful.MapColl as M
 import Webb.Boundary.Data.Alias (Alias)
 import Webb.Boundary.Data.Alias as Alias
+import Webb.Boundary.Data.SymbolTable (SymbolTable, SymbolType(..))
+import Webb.Boundary.Data.SymbolTable as SymbolTable
+import Webb.Boundary.Data.Token as Token
 import Webb.Boundary.Data.TypeMap (TypeMap)
 import Webb.Boundary.Data.TypeMap as TypeMap
 
@@ -32,51 +26,22 @@ import Webb.Boundary.Data.TypeMap as TypeMap
 In our case, we do allow structural comparisons of record types, but boundary types are NOT allowed to be reused in concrete types.
 -}
 
-data SymbolType 
-  = INT
-  | DOUBLE
-  | BOOL
-  | STRING
-  | RECORD (Map String SymbolType)
-  | PRODUCT Int
-  | ALIAS Param 
-  
-type SymbolTable = Map String SymbolType
-
 getGlobalSymbolTable :: Tree -> Aff (Either (Array String) SymbolTable)
 getGlobalSymbolTable tree = do
-  table <- newMap
+  table <- newShowRef SymbolTable.emptyTable
   let 
     env = { tree, symbols: table } :: Env
-    predefined = default
+    predefined = SymbolTable.predefined
     prog = do
       defined <- readDeclaredSymbols
       noRedefinedSymbols predefined defined
-      let combined = Map.union predefined defined
+      let combined = SymbolTable.union predefined defined
       pure combined
 
   eval env prog
 
-default :: SymbolTable
-default = Map.fromFoldable
-  [ "Int" /\ INT
-  , "Number" /\ DOUBLE
-  , "Double" /\ DOUBLE
-  , "String" /\ STRING
-
-  , "Array" /\ PRODUCT 1
-  , "Map" /\ PRODUCT 2
-  , "Tuple" /\ PRODUCT 2
-  
-  -- The complex function types must be the _return_ types of a function, but
-  -- can appear in an alias. There is no function type otherwise. The complex function
-  -- types CANNOT be arguments.
-  , "Effect" /\ PRODUCT 1
-  , "Aff" /\ PRODUCT 1
-  ]
-  
 type Env = 
-  { symbols :: MapColl String SymbolType
+  { symbols :: ShowRef SymbolTable
   , tree :: Tree
   }
   
@@ -92,22 +57,22 @@ declareAlias :: Alias -> Prog Unit
 declareAlias alias = do
   this <- mread
   let name = Alias.name alias
-  whenM (M.member this.symbols name) do
+  whenM (SymbolTable.member name <: this.symbols) do
     throwError [ alreadyDefined name ]
 
   case Alias.target alias of
     Alias.AliasedParam wrapped -> do
-      M.insert this.symbols name (ALIAS wrapped)
+      SymbolTable.insert name (ALIAS wrapped) :> this.symbols
     Alias.AliasedMap m -> do
-      M.insert this.symbols name (RECORD $ convert m)
+      SymbolTable.insert name (RECORD $ convert m) :> this.symbols
       
   where
   convert :: TypeMap -> Map String SymbolType
   convert map = let 
     pairs = TypeMap.pairs map
-    converted = pairs <#> uncurry \token wrapped -> 
+    converted = pairs <#> uncurry \token param -> 
       let name = Token.text token
-      in name /\ ALIAS wrapped
+      in name /\ ALIAS param
     in Map.fromFoldable converted
   
   alreadyDefined name = 
@@ -133,100 +98,11 @@ readDeclaredSymbols = do
 noRedefinedSymbols :: SymbolTable -> SymbolTable -> Prog Unit
 noRedefinedSymbols old new = do
   let 
-    shared = Map.intersection old new
-    pairs = Map.toUnfoldable shared
-    errors = pairs <#> uncurry \name _ -> illegal name
+    shared = SymbolTable.intersection old new
+    symbols = Array.fromFoldable $ SymbolTable.symbols shared
+    errors = symbols <#> \name -> illegal name
   when (errors == []) do
     throwError errors
   
   where 
   illegal name = "Illegally redefines an existing type: " <> name
-    
-typeExists :: String -> SymbolTable -> Boolean
-typeExists name = Map.member name
-
-isProduct :: String -> SymbolTable -> Boolean
-isProduct name table = let 
-  is = do
-    entry <- Map.lookup name table
-    case entry of
-      PRODUCT _ -> pure true
-      _ -> pure false
-  in fromMaybe false is
-
--- Arg count of a symbol is either a result of it being a product, or 
--- the arg count of an aliased symbol, or the arg count 0.
-argCount :: String -> SymbolTable -> Int
-argCount name table = let 
-  count = do
-    entry <- Map.lookup name table
-    case entry of
-      PRODUCT i -> pure i
-      ALIAS _ -> pure 0 -- even aliases have 0 args. They have no type arguments.
-      _ -> pure 0
-  in fromMaybe 0 count
-
--- Resolve the type symbol to a final _first_ type, converting all
--- aliases. CANNOT handle circular aliases that refer to themselves.
-resolve :: String -> SymbolTable -> String
-resolve name table = fromMaybe "unknown" do
-  entry <- Map.lookup name table
-  case entry of
-    ALIAS param -> do 
-      -- An alias resolves to a different type symbol, across multiple aliases.
-      let next = Param.name param
-      pure $ resolve next table
-    _ -> 
-      -- Any other type resolves to its own symbol name.
-      pure name
-      
--- Check for a reference to the symbol within the parameter, or the parameters
--- arguments.
-refersToSymbol :: String -> Param -> SymbolTable -> Boolean
-refersToSymbol name param table = 
-  let
-  pname = Param.name param
-  args = Param.args param
-  found = searchFor_ { symbol: name, startingFrom: pname }
-  in if found then
-    true
-  else 
-    A.any refersToMe args
-  where
-  searchFor_ args = searchFor args table
-  refersToMe childParam = refersToSymbol name childParam table
-
--- Is the given symbol found somewhere?
-searchFor :: 
-  { symbol :: String, startingFrom :: String} -> SymbolTable -> Boolean
-searchFor { symbol, startingFrom: other } table =
-  if symbol == other then 
-    true
-  else 
-    fromMaybe false do
-      entry <- Map.lookup other table
-      case entry of
-        -- We have to search all params of the alias to find out if we are
-        -- referring back to ourselves.
-        ALIAS wrapped -> do 
-          pure $ localEffect $ searchParam wrapped
-        _ -> pure false
-  where
-  -- We search each of the params and child params, stopping when the first
-  -- circular match is found.
-  searchParam param = do
-    let 
-      name = Param.name param
-      args = Param.args param
-      findSelf = pure $ searchFor { symbol, startingFrom: name } table
-      findArgs = args <#> searchParam
-      programs = [findSelf] <> findArgs
-    anyM identity (L.fromFoldable programs)
-      
-    
-argsOf :: Param -> Array Param
-argsOf param = Param.args param
-    
-    
-
-    

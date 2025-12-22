@@ -9,20 +9,19 @@ import Control.Monad.State (StateT, evalStateT)
 import Data.Array as A
 import Data.Either (Either)
 import Data.Foldable (for_)
-import Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Effect.Aff (Aff, throwError)
 import Effect.Aff.Class (class MonadAff, liftAff)
-import Webb.Boundary.Data.Method (Method)
-import Webb.Boundary.Data.Method as Method
-import Webb.Boundary.TypeSymbols as TS
-import Webb.Boundary.Data.Param (Param)
-import Webb.Boundary.Data.Param as Param
-import Webb.Stateful.ArrayColl (ArrayColl, newArray)
-import Webb.Stateful.ArrayColl as Arr
 import Webb.Boundary.Data.Alias (Alias)
 import Webb.Boundary.Data.Alias as Alias
-import Webb.Boundary.Data.TypeMap as TypeMap
-
+import Webb.Boundary.Data.Method (Method)
+import Webb.Boundary.Data.Method as Method
+import Webb.Boundary.Data.Param (Param)
+import Webb.Boundary.Data.Param as Param
+import Webb.Boundary.Data.SymbolTable (SymbolTable)
+import Webb.Boundary.Data.SymbolTable as SymbolTable
+import Webb.Stateful.ArrayColl (ArrayColl, newArray)
+import Webb.Stateful.ArrayColl as Arr
 
 {- Once all global type symbols have been defined, we can start checking
   whether all type usages are actually correct. This means we need to check:
@@ -44,7 +43,6 @@ import Webb.Boundary.Data.TypeMap as TypeMap
   To perform the parameter check, we _don't_ need to iterate over TypeMap, Alias,
   and Boundary. Each instance of 'Param' is a place where we can check the usage.
 -}
-
 
 -- In the context of this local state, run the following code.
 type Env = 
@@ -117,14 +115,15 @@ expect success msg = do unless success do addError msg
 resolve :: String -> Check String
 resolve name = do 
   env <- mread
-  pure $ TS.resolve name env.symbols
+  let mname = SymbolTable.resolveToHigherType name env.symbols
+  pure $ fromMaybe "unknown" mname
 
 -- If we detect a circular relation where the param refers back to the
 -- alias symbol in _any_ parts of the param (name or args), add an error.
-checkCircularAlias :: String -> Param -> Check Unit
-checkCircularAlias name p = do
+checkCircularAlias :: String -> Check Unit
+checkCircularAlias name = do
   this <- mread
-  expect (not $ refersToSymbol name p this.symbols) 
+  expect (not $ SymbolTable.isCircularAlias name this.symbols)
     $ "Type alias refers back to itself: " <> name
 
 
@@ -132,15 +131,7 @@ checkCircularAlias name p = do
 -- back to themselves in their concrete type, in _any_ of the parameters.
 -- Because if they do, we can't successfully write out the type.
 noCircularAlias :: Alias -> Check Unit
-noCircularAlias al = do 
-  let name = Alias.name al
-  case Alias.target al of 
-    Alias.AliasedParam p -> do
-      checkCircularAlias name p
-    Alias.AliasedMap m -> do
-      let params = TypeMap.params m
-      for_ params \p -> do
-        checkCircularAlias name p
+noCircularAlias al = checkCircularAlias $ Alias.name al
 
 -- We check each parameter for existence and completeness
 typeCheckParam :: Param -> Check Unit
@@ -159,13 +150,13 @@ typeCheckParam param = do
   nameExists name = do
     self <- mread
     let env = self
-    expect (Map.member name env.symbols) $
+    expect (SymbolTable.member name env.symbols) $
       "Unknown type: " <> name
     
   argCountIsCorrect name args = do
     env <- mread
-    when (isProduct name env.symbols) do
-      let expected = argCount name env.symbols
+    when (SymbolTable.isProduct name env.symbols) do
+      let expected = SymbolTable.argCount name env.symbols
           actual = A.length args           
       expect (expected == actual) $
         "Expected " <> show expected <> 

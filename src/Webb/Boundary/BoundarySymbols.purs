@@ -8,7 +8,6 @@ import Control.Monad.State (StateT, evalStateT, runStateT)
 import Data.Either (Either)
 import Data.Foldable (for_)
 import Data.Map (Map)
-import Data.Map as Map
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
 import Webb.Boundary.Data.Boundary (Boundary)
@@ -17,7 +16,8 @@ import Webb.Boundary.Data.Method (Method)
 import Webb.Boundary.Data.Method as Method
 import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.Token (Token)
-import Webb.Boundary.TypeSymbols (SymbolTable)
+import Webb.Boundary.Data.SymbolTable (SymbolTable)
+import Webb.Boundary.Data.SymbolTable as SymbolTable
 import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
 
@@ -95,7 +95,7 @@ addBoundary b = do
     throwError $ [ alreadyDefined name ]
     
   -- Cannot clash with an existing type.
-  when (Map.member name this.symbols) do 
+  when (SymbolTable.member name this.symbols) do 
     throwError $ [ alreadyDefined name ]
     
   M.insert this.table name entry
