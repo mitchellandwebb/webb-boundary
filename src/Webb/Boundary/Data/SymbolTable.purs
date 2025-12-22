@@ -26,6 +26,7 @@ import Webb.Stateful.MapColl as MapColl
 
 
 newtype SymbolTable = SymbolTable_ SymbolTable_
+type STable = SymbolTable
 
 type SymbolTable_ = Map String SymbolType
 
