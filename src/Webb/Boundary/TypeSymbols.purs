@@ -61,8 +61,8 @@ declareAlias alias = do
     throwError [ alreadyDefined name ]
 
   case Alias.target alias of
-    Alias.AliasedParam wrapped -> do
-      SymbolTable.insert name (ALIAS wrapped) :> this.symbols
+    Alias.AliasedParam param -> do
+      SymbolTable.insert name (ALIAS param) :> this.symbols
     Alias.AliasedMap m -> do
       SymbolTable.insert name (RECORD $ convert m) :> this.symbols
       
