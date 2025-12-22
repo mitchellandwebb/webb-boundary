@@ -39,9 +39,9 @@ eval :: forall a. Env -> Prog a -> Aff (Either (Array String) a)
 eval env prog = prog # runExceptT >>> flip evalStateT env
 
 -- Get the table of all boundaries, and their methods.
-getGlobalBoundaryTable :: 
+buildTable :: 
   Tree -> STable -> Aff (Either (Array String) BTable)
-getGlobalBoundaryTable tree symbols = do 
+buildTable tree symbols = do 
   table <- newShowRef BTable.emptyTable
   let 
     env = { table, tree, symbols } :: Env
