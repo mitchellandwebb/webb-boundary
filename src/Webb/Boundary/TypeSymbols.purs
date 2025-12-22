@@ -13,11 +13,12 @@ import Data.List as L
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (fromMaybe)
-import Data.Newtype (unwrap)
-import Data.Tuple (uncurry)
 import Effect.Aff (Aff, throwError)
 import Effect.Aff.Class (liftAff)
-import Webb.Boundary.Parser (AliasTarget(..), Param, TypeMap)
+import Webb.Boundary.Data.Token as Token
+import Webb.Boundary.Data.Param (Param)
+import Webb.Boundary.Data.Param as Param
+import Webb.Boundary.Parser (AliasTarget(..), TypeMap)
 import Webb.Boundary.Parser as P
 import Webb.Stateful (localEffect)
 import Webb.Stateful.MapColl (MapColl, newMap)
@@ -88,7 +89,7 @@ eval env prog = prog # runExceptT >>> flip evalStateT env
 declareAlias :: P.Alias -> Prog Unit
 declareAlias alias = do
   this <- mread
-  let name = alias.name.string
+  let name = Token.text alias.name
   whenM (M.member this.symbols name) do
     throwError [ alreadyDefined name ]
 
@@ -103,7 +104,7 @@ declareAlias alias = do
   convert map = let 
     pairs = Map.toUnfoldable map :: Array _
     converted = pairs <#> uncurry \token wrapped -> 
-      let name = token.string
+      let name = Token.text token
       in name /\ ALIAS wrapped
     in Map.fromFoldable converted
   
@@ -169,11 +170,9 @@ resolve :: String -> SymbolTable -> String
 resolve name table = fromMaybe "unknown" do
   entry <- Map.lookup name table
   case entry of
-    ALIAS wrapped -> do 
+    ALIAS param -> do 
       -- An alias resolves to a different type symbol, across multiple aliases.
-      let
-        p = unwrap wrapped
-        next = p.name.string
+      let next = Param.name param
       pure $ resolve next table
     _ -> 
       -- Any other type resolves to its own symbol name.
@@ -181,12 +180,11 @@ resolve name table = fromMaybe "unknown" do
       
 -- Check for a reference to the symbol within the parameter, or the parameters
 -- arguments.
-refersToSymbol :: String -> P.Param -> SymbolTable -> Boolean
-refersToSymbol name wrapped table = 
+refersToSymbol :: String -> Param -> SymbolTable -> Boolean
+refersToSymbol name param table = 
   let
-  param = unwrap wrapped
-  pname = param.name.string
-  args = param.args
+  pname = Param.name param
+  args = Param.args param
   found = searchFor_ { symbol: name, startingFrom: pname }
   in if found then
     true
@@ -214,21 +212,18 @@ searchFor { symbol, startingFrom: other } table =
   where
   -- We search each of the params and child params, stopping when the first
   -- circular match is found.
-  searchParam wrapped = do
+  searchParam param = do
     let 
-      p = unwrap wrapped
-      name = p.name.string
-      args = p.args
+      name = Param.name param
+      args = Param.args param
       findSelf = pure $ searchFor { symbol, startingFrom: name } table
       findArgs = args <#> searchParam
       programs = [findSelf] <> findArgs
     anyM identity (L.fromFoldable programs)
       
     
-argsOf :: P.Param -> Array P.Param
-argsOf wrapped = let
-  p = unwrap wrapped
-  in p.args
+argsOf :: Param -> Array Param
+argsOf param = Param.args param
     
     
 

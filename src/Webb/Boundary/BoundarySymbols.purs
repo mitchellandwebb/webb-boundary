@@ -11,8 +11,10 @@ import Data.Map (Map)
 import Data.Map as Map
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
+import Webb.Boundary.Data.Token (Token)
+import Webb.Boundary.Data.Token as Token
 import Webb.Boundary.Parser as P
-import Webb.Boundary.Tokens (Token)
+import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.TypeCheck (methodParams, methodReturn)
 import Webb.Boundary.TypeSymbols (SymbolTable)
 import Webb.Stateful (localEffect)
@@ -40,7 +42,7 @@ type FunctionEntry =
   , return :: Concrete
   }
   
-type Concrete = P.Param
+type Concrete = Param
 
 type Env = 
   { tree :: Tree
@@ -80,7 +82,7 @@ readBoundaries = do
 addBoundary :: P.Boundary -> Prog Unit
 addBoundary b = do 
   this <- mread
-  let name = b.name.string
+  let name = Token.text b.name
   
   functions <- getFunctionTable b.methods
   let entry = 
@@ -104,7 +106,7 @@ addBoundary b = do
     fmap <- newMap
     for_ methods \method -> do
       let 
-        name = method.name.string
+        name = Token.text method.name
         entry = 
           { name: method.name
           , params: localEffect $ methodParams method

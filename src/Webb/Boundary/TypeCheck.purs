@@ -10,13 +10,15 @@ import Data.Array as A
 import Data.Either (Either)
 import Data.Foldable (for_)
 import Data.Map as Map
-import Data.Newtype (unwrap)
 import Effect.Aff (Aff, throwError)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
+import Webb.Boundary.Data.Token as Token
 import Webb.Boundary.Parser as P
 import Webb.Boundary.TypeSymbols as TS
 import Webb.Monad.Prelude (forceMaybe')
+import Webb.Boundary.Data.Param (Param)
+import Webb.Boundary.Data.Param as Param
 import Webb.Stateful.ArrayColl (ArrayColl, newArray)
 import Webb.Stateful.ArrayColl as Arr
 
@@ -118,7 +120,7 @@ resolve name = do
 
 -- If we detect a circular relation where the param refers back to the
 -- alias symbol in _any_ parts of the param (name or args), add an error.
-checkCircularAlias :: String -> P.Param -> Check Unit
+checkCircularAlias :: String -> Param -> Check Unit
 checkCircularAlias name p = do
   this <- mread
   expect (not $ refersToSymbol name p this.symbols) 
@@ -130,7 +132,7 @@ checkCircularAlias name p = do
 -- Because if they do, we can't successfully write out the type.
 noCircularAlias :: P.Alias -> Check Unit
 noCircularAlias al = do 
-  let name = al.name.string
+  let name = Token.text al.name
   case al.target of 
     P.AliasedParam p -> do
       checkCircularAlias name p
@@ -140,12 +142,11 @@ noCircularAlias al = do
         checkCircularAlias name p
 
 -- We check each parameter for existence and completeness
-typeCheckParam :: P.Param -> Check Unit
-typeCheckParam wrapped = do
+typeCheckParam :: Param -> Check Unit
+typeCheckParam param = do
   let 
-    p = unwrap wrapped 
-    name = p.name.string
-    args = p.args
+    name = Param.name param
+    args = Param.args param
     
   nameExists name -- Does it refer to a valid existing type?
   argCountIsCorrect name args -- Is that type completed by the args?
@@ -179,14 +180,13 @@ illegalMethod m = do
   for_ args noEffectOrAff
 
   requireEffectOrAff return
-  for_ (argsOf return) noEffectOrAff
+  for_ (Param.args return) noEffectOrAff
   
   where
-  noEffectOrAff w = do 
+  noEffectOrAff param = do 
     -- Final resolution of the type name to a non-alias must not be
     -- Effect or Aff
-    let p = unwrap w
-    name <- resolve p.name.string
+    name <- resolve $ Param.name param
     expect (name /= "Effect") 
       "Cannot use Effect here"
     expect (name /= "Aff") 
@@ -194,21 +194,20 @@ illegalMethod m = do
     
     -- Recursively, even the type arguments in a function parameter cannot 
     -- use Effect or Aff. It is exclusive to the Return value.
-    for_ p.args noEffectOrAff
+    for_ (Param.args param) noEffectOrAff
     
-  requireEffectOrAff w = do
+  requireEffectOrAff param = do
     -- Final resolution of the type name to a non-alias must be Effect or Aff
-    let p = unwrap w
-    name <- resolve p.name.string
+    name <- resolve $ Param.name param
     expect (name == "Effect" || name == "Aff")
       "Function return type must be Aff or Effect"
 
-methodParams :: forall m. MonadEffect m => P.Method -> m (Array P.Param)
+methodParams :: forall m. MonadEffect m => P.Method -> m (Array Param)
 methodParams method = liftEffect do
   let minit = A.init method.params
   forceMaybe' "No function parameters were provided" minit
   
-methodReturn :: forall m. MonadEffect m => P.Method -> m P.Param
+methodReturn :: forall m. MonadEffect m => P.Method -> m Param
 methodReturn method = liftEffect do
   let mlast = A.last method.params
   forceMaybe' "No function parameters were provided" mlast

@@ -10,15 +10,17 @@ import Data.Foldable as Trav
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Tuple (fst, snd)
 import Effect.Aff (Aff, throwError)
 import Webb.Boundary.BoundarySymbols (BoundaryTable)
+import Webb.Boundary.Data.Token as Token
 import Webb.Boundary.Parser as P
 import Webb.Boundary.TypeCheck (methodParams, methodReturn)
 import Webb.Boundary.TypeSymbols (SymbolTable, SymbolType(..))
+import Webb.Boundary.Data.Param (Param)
+import Webb.Boundary.Data.Param as Param
 import Webb.Monad.Prelude (forceMaybe')
 import Webb.Stateful (localEffect)
 import Webb.Stateful.ArrayColl (newArray)
@@ -48,16 +50,16 @@ buildEnv file = do
 
 type Alias = String /\ AliasTarget
 
-data AliasTarget = AliasMap TypeMap | AliasParam P.Param
+data AliasTarget = AliasMap TypeMap | AliasParam Param
 
 type Boundary = String /\ Array FnDef
 
-type TypeMap = Map String P.Param
+type TypeMap = Map String Param
 
 type FnDef = 
   { name :: String
-  , args :: Array P.Param
-  , return :: P.Param
+  , args :: Array Param
+  , return :: Param
   }
   
 getAliases :: Tree -> Aff (Array Alias)
@@ -68,7 +70,7 @@ getAliases tree = do
   
   where
   addAlias arr alias = do
-    let name = alias.name.string
+    let name = Token.text alias.name
     case alias.target of
       P.AliasedParam p -> do
         Arr.addLast arr $ name /\ AliasParam p
@@ -77,7 +79,7 @@ getAliases tree = do
         
   convert map = let
     pairs = Map.toUnfoldable map :: Array _
-    converted = pairs <#> uncurry \token param -> token.string /\ param
+    converted = pairs <#> uncurry \token param -> Token.text token /\ param
     in Map.fromFoldable converted
 
 getBoundaries :: Tree -> Aff (Array Boundary)
@@ -88,7 +90,7 @@ getBoundaries tree = do
   
   where
   addBound boundArray b = do
-    let name = b.name.string
+    let name = Token.text b.name
     defArray <- newArray
     for_ b.methods \m -> addDef defArray m
     
@@ -96,7 +98,7 @@ getBoundaries tree = do
     Arr.addLast boundArray $ name /\ defs
     
   addDef defArray m = do
-    let name = m.name.string
+    let name = Token.text m.name
     args <- methodParams m
     return <- methodReturn m
     Arr.addLast defArray { name, args, return }
@@ -150,13 +152,12 @@ aliasTierList table = localEffect do
   getScore name score = do 
     entry <- Map.lookup name table
     case entry of 
-      ALIAS wrapped -> do
+      ALIAS param -> do
         let 
           score' = score + 1 :: Int
-          param = unwrap wrapped
-          pname = param.name.string  :: String
+          pname = Param.name param
           nameScore = rootLength pname score' :: Int
-          argNames = param.args <#> paramName :: Array String
+          argNames = Param.args param <#> Param.name :: Array String
           argScores = (argNames <#> \argName -> rootLength argName score') :: Array Int
           allScores = [ nameScore ] <> argScores :: Array Int
 
@@ -165,7 +166,4 @@ aliasTierList table = localEffect do
         maximum allScores
       _ -> do 
         pure score  -- Anything else terminates the search; we reached the root.
-
-  paramName :: P.Param -> String
-  paramName wrapped = wrapped # unwrap >>> _.name.string
 

@@ -5,10 +5,11 @@ import Webb.Boundary.Prelude
 import Data.List (List)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Newtype (class Newtype)
 import Parsing.Token as T
-import Webb.Boundary.Tokens (Token, Kind)
-import Webb.Boundary.Tokens as Tok
+import Webb.Boundary.Data.Param (Param)
+import Webb.Boundary.Data.Param as Param
+import Webb.Boundary.Data.Token (Token, TokenKind)
+import Webb.Boundary.Data.Token as Tok
 
 type Parse = Parser (List Token)
 
@@ -16,44 +17,46 @@ type Parse = Parser (List Token)
 next :: Parse Token
 next = try do T.token getPos
   where
-  getPos t = Position 
-    { index: t.index
-    , column: t.column
-    , line: t.line
-    }
+  getPos t = let 
+    p = Tok.position t
+    in Position 
+      { index: p.index
+      , column: p.column
+      , line: p.line
+      }
     
 -- Get the next token, while asserting it is a specific kind of token.
-token :: Kind -> Parse Token
+token :: TokenKind -> Parse Token
 token kind = try do 
   t <- next
-  if t.kind == kind then do
+  if Tok.kind t == kind then do
     pure t
   else do
-    fail $ "Expected token " <> show kind <> ", but got " <> show t.kind
+    fail $ "Expected token " <> show kind <> ", but got " <> show (Tok.kind t)
 
 op :: String -> Parse Token
 op str = try do 
   t <- token Tok.Operator
-  if t.string == str then do
+  if Tok.hasText str t then do
     pure t
   else do
-    fail $ "Expected token " <> str <> ", but got " <> t.string
+    fail $ "Expected token " <> str <> ", but got " <> Tok.text t
 
 delim :: String -> Parse Token
 delim str = try do 
   t <- token Tok.Delim
-  if t.string == str then do
+  if Tok.hasText str t then do
     pure t
   else do
-    fail $ "Expected token " <> str <> ", but got " <> t.string
+    fail $ "Expected token " <> str <> ", but got " <> Tok.text t
 
 sep :: String -> Parse Token
 sep str = do 
   t <- token Tok.Separator
-  if t.string == str then do
+  if Tok.hasText str t then do
     pure t
   else do
-    fail $ "Expected token " <> str <> ", but got " <> t.string
+    fail $ "Expected token " <> str <> ", but got " <> Tok.text t
     
 type Boundary = 
   { name :: Token
@@ -85,20 +88,13 @@ method = try do
   params <- sepBy param (op "->")
   pure { name, params }
   
-newtype Param = Param_
-  { name :: Token
-  , args :: Array Param
-  }
-  
-derive instance Newtype Param _
-  
 -- Int | (Int) | Array Int | Array (Int) | (Array) Int | (Array (Array Int)) | Array Array Int
 param :: Parse Param
 param = try do 
   strip lp rp do
     name <- token Tok.TypeName
     args <- many (paramArg unit)
-    pure $ Param_ { name, args }
+    pure $ Param.newParam { name, args }
     
   where
   lp = delim  "("
@@ -110,7 +106,7 @@ param = try do
     alts 
       [ do
           name <- token Tok.TypeName
-          pure $ Param_ { name, args: [] }
+          pure $ Param.newParam { name, args: [] }
       , whenNext lp param 
       ]
 

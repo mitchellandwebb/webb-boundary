@@ -7,6 +7,7 @@ import Data.Map as Map
 import Data.Newtype (unwrap)
 import Effect.Aff (Aff)
 import Webb.Boundary.Parser as P
+import Webb.Boundary.Data.Param (Param)
 
 data Tree 
   = Document (Array Tree)
@@ -21,7 +22,7 @@ parseTree = do
 class Visitor a where
   boundary :: a -> P.Boundary -> Aff Unit
   method :: a -> P.Method -> Aff Unit
-  param :: a -> P.Param -> Aff Unit
+  param :: a -> Param -> Aff Unit
   alias :: a -> P.Alias -> Aff Unit
   typeMap :: a -> P.TypeMap -> Aff Unit
 
@@ -31,7 +32,7 @@ defaultBoundary _ _ = pure unit
 defaultMethod :: forall a. a -> P.Method -> Aff Unit
 defaultMethod _ _ = pure unit
 
-defaultParam :: forall a. a -> P.Param -> Aff Unit
+defaultParam :: forall a. a -> Param -> Aff Unit
 defaultParam _ _ = pure unit
 
 defaultAlias :: forall a. a -> P.Alias -> Aff Unit
@@ -75,7 +76,7 @@ newtype GeneralVisitor = GV GV_
 type GV_ = 
   { boundary :: P.Boundary -> Aff Unit
   , method :: P.Method -> Aff Unit
-  , param :: P.Param -> Aff Unit
+  , param :: Param -> Aff Unit
   , alias :: P.Alias -> Aff Unit
   , typeMap :: P.TypeMap -> Aff Unit
   }
@@ -106,7 +107,7 @@ allMethods tree prog = do
   let v = GV $ default { method = prog }
   visit v tree
 
-allParams :: Tree -> (P.Param -> Aff Unit) -> Aff Unit
+allParams :: Tree -> (Param -> Aff Unit) -> Aff Unit
 allParams tree prog = do
   let v = GV $ default { param = prog }
   visit v tree

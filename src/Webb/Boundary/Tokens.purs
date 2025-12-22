@@ -3,11 +3,11 @@ module Webb.Boundary.Tokens where
 import Webb.Boundary.Prelude
 
 import Data.Either (Either(..))
-import Data.Generic.Rep (class Generic)
-import Data.Show.Generic (genericShow)
 import Effect.Class (class MonadEffect, liftEffect)
 import Parsing.String (eof)
 import Parsing.String.Basic (skipSpaces)
+import Webb.Boundary.Data.Token (Token, TokenKind(..))
+import Webb.Boundary.Data.Token as Token
 import Webb.Monad.Prelude (throwString)
 
 
@@ -18,31 +18,6 @@ represents, so we don't have to parse later. Honestly, it's really bizarre how
 bad this tool is for saying what I actually want to say.
 -}
 
-type Token = 
-  { string :: String
-  , kind :: Kind
-  , line :: Int
-  , column :: Int
-  , endLine :: Int
-  , endColumn :: Int
-  , index :: Int
-  }
-  
-data Kind 
-  = Operator 
-  | Boundary
-  | Where
-  | Alias
-  | TypeName
-  | FunctionName
-  | Delim
-  | Separator
-  
-derive instance Eq Kind
-derive instance Ord Kind
-derive instance Generic Kind _
-instance Show Kind where show = genericShow
-  
 type Parse = Parser String
 
 tokens :: forall m. MonadEffect m => String -> m (Array Token)
@@ -72,13 +47,13 @@ token = longest
   , functionName
   ]
 
-asToken :: Kind -> Parse String -> Parse Token
+asToken :: TokenKind -> Parse String -> Parse Token
 asToken kind prog = try do 
   p1 <- filePosition
   i <- index
   string <- try prog
   p2 <- filePosition
-  pure $ 
+  pure $ Token.new
     { kind
     , string 
     , line: p1.line
