@@ -11,13 +11,13 @@ import Data.Map (Map)
 import Data.Map as Map
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
-import Webb.Boundary.Data.Token (Token)
-import Webb.Boundary.Data.Token as Token
-import Webb.Boundary.Parser as P
+import Webb.Boundary.Data.Boundary (Boundary)
+import Webb.Boundary.Data.Boundary as Bound
+import Webb.Boundary.Data.Method (Method)
+import Webb.Boundary.Data.Method as Method
 import Webb.Boundary.Data.Param (Param)
-import Webb.Boundary.TypeCheck (methodParams, methodReturn)
+import Webb.Boundary.Data.Token (Token)
 import Webb.Boundary.TypeSymbols (SymbolTable)
-import Webb.Stateful (localEffect)
 import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
 
@@ -79,15 +79,15 @@ readBoundaries = do
     allBoundaries this.tree \bound -> run this (addBoundary bound)
   getTable
 
-addBoundary :: P.Boundary -> Prog Unit
+addBoundary :: Boundary -> Prog Unit
 addBoundary b = do 
   this <- mread
-  let name = Token.text b.name
+  let name = Bound.name b
   
-  functions <- getFunctionTable b.methods
+  functions <- getFunctionTable $ Bound.methods b
   let entry = 
         { functions
-        , name: b.name
+        , name: Bound.nameToken b
         } :: BoundaryEntry
   
   -- Cannot clash with an existing boundary.
@@ -101,19 +101,19 @@ addBoundary b = do
   M.insert this.table name entry
   
   where 
-  getFunctionTable :: Array P.Method -> Prog FunctionTable
+  getFunctionTable :: Array Method -> Prog FunctionTable
   getFunctionTable methods = do
     fmap <- newMap
     for_ methods \method -> do
       let 
-        name = Token.text method.name
+        name = Method.name method
         entry = 
-          { name: method.name
-          , params: localEffect $ methodParams method
-          , return: localEffect $ methodReturn method
+          { name: Method.nameToken method
+          , params: Method.firstParams method
+          , return: Method.returnParam method
           } :: FunctionEntry
       
-      whenM (M.member fmap name) do
+      whenM (M.member fmap $ name) do
         throwError [ "Function has already been defined: " <> name ]
       M.insert fmap name entry
 

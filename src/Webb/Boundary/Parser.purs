@@ -3,13 +3,20 @@ module Webb.Boundary.Parser where
 import Webb.Boundary.Prelude
 
 import Data.List (List)
-import Data.Map (Map)
 import Data.Map as Map
 import Parsing.Token as T
+import Webb.Boundary.Data.Boundary (Boundary)
+import Webb.Boundary.Data.Boundary as Bound
+import Webb.Boundary.Data.Method (Method)
+import Webb.Boundary.Data.Method as Method
 import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.Param as Param
 import Webb.Boundary.Data.Token (Token, TokenKind)
 import Webb.Boundary.Data.Token as Tok
+import Webb.Boundary.Data.Alias (Alias)
+import Webb.Boundary.Data.Alias as Alias
+import Webb.Boundary.Data.TypeMap (TypeMap)
+import Webb.Boundary.Data.TypeMap as TypeMap
 
 type Parse = Parser (List Token)
 
@@ -58,11 +65,6 @@ sep str = do
   else do
     fail $ "Expected token " <> str <> ", but got " <> Tok.text t
     
-type Boundary = 
-  { name :: Token
-  , methods :: Array Method
-  }
-    
 -- Parse a boundary definition.
 boundary :: Parse Boundary
 boundary = try do 
@@ -71,22 +73,17 @@ boundary = try do
   _ <- token Tok.Where
   methods <- many method
   
-  pure 
+  pure $ Bound.newBoundary
     { name: name
     , methods
     }
     
-type Method = 
-  { name :: Token
-  , params :: Array Param
-  }
-
 method :: Parse Method
 method = try do
   name <- token Tok.FunctionName
   _ <- op "::"
   params <- sepBy param (op "->")
-  pure { name, params }
+  pure $ Method.newMethod { name, params }
   
 -- Int | (Int) | Array Int | Array (Int) | (Array) Int | (Array (Array Int)) | Array Array Int
 param :: Parse Param
@@ -110,32 +107,23 @@ param = try do
       , whenNext lp param 
       ]
 
-  
-type Alias = 
-  { name :: Token
-  , target :: AliasTarget
-  }
-  
-data AliasTarget = AliasedParam Param | AliasedMap TypeMap
-
 -- Parse a type alias
 alias :: Parse Alias
 alias = try do
   _ <- token Tok.Alias
   name <- token Tok.TypeName
   _ <- op "="
-  target <- alts [ AliasedParam <$> param, AliasedMap <$> typeMap ]
-  pure { name, target }
+  target <- alts [ Alias.AliasedParam <$> param, Alias.AliasedMap <$> typeMap ]
+  pure $ Alias.newAlias { name, target }
   
-type TypeMap = Map Token Param
-
 -- Parse a type map -- in other words, a Record type
 typeMap :: Parse TypeMap
 typeMap = try do 
   _ <- delim "{"
   pairs <- sepEndBy pair (sep ",")
   _ <- delim "}"
-  pure $ Map.fromFoldable pairs
+  let map = Map.fromFoldable pairs
+  pure $ TypeMap.newTypeMap map
 
   where
   pair = try do

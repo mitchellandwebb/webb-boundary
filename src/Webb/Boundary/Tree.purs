@@ -3,82 +3,89 @@ module Webb.Boundary.Tree where
 import Webb.Boundary.Prelude
 
 import Data.Foldable (for_)
-import Data.Map as Map
 import Data.Newtype (unwrap)
 import Effect.Aff (Aff)
+import Webb.Boundary.Data.Boundary (Boundary)
+import Webb.Boundary.Data.Boundary as Bound
+import Webb.Boundary.Data.Method (Method)
+import Webb.Boundary.Data.Method as Method
 import Webb.Boundary.Parser as P
 import Webb.Boundary.Data.Param (Param)
+import Webb.Boundary.Data.Alias (Alias)
+import Webb.Boundary.Data.Alias as Alias
+import Webb.Boundary.Data.TypeMap (TypeMap)
+import Webb.Boundary.Data.TypeMap as TypeMap
 
 data Tree 
   = Document (Array Tree)
-  | Boundary P.Boundary
-  | Alias P.Alias
+  | ABoundary Boundary
+  | AnAlias Alias
   
 parseTree :: P.Parse Tree
 parseTree = do
-  trees <- mix [ Boundary <$> P.boundary, Alias <$> P.alias ]
+  trees <- mix [ ABoundary <$> P.boundary, AnAlias <$> P.alias ]
   pure $ Document trees
   
 class Visitor a where
-  boundary :: a -> P.Boundary -> Aff Unit
-  method :: a -> P.Method -> Aff Unit
+  boundary :: a -> Boundary -> Aff Unit
+  method :: a -> Method -> Aff Unit
   param :: a -> Param -> Aff Unit
-  alias :: a -> P.Alias -> Aff Unit
-  typeMap :: a -> P.TypeMap -> Aff Unit
+  alias :: a -> Alias -> Aff Unit
+  typeMap :: a -> TypeMap -> Aff Unit
 
-defaultBoundary :: forall a. a -> P.Boundary -> Aff Unit
+defaultBoundary :: forall a. a -> Boundary -> Aff Unit
 defaultBoundary _ _ = pure unit
 
-defaultMethod :: forall a. a -> P.Method -> Aff Unit
+defaultMethod :: forall a. a -> Method -> Aff Unit
 defaultMethod _ _ = pure unit
 
 defaultParam :: forall a. a -> Param -> Aff Unit
 defaultParam _ _ = pure unit
 
-defaultAlias :: forall a. a -> P.Alias -> Aff Unit
+defaultAlias :: forall a. a -> Alias -> Aff Unit
 defaultAlias _ _ = pure unit
 
-defaultTypeMap :: forall a. a -> P.TypeMap -> Aff Unit
+defaultTypeMap :: forall a. a -> TypeMap -> Aff Unit
 defaultTypeMap _ _ = pure unit
   
 visit :: forall a. Visitor a => a -> Tree -> Aff Unit
 visit visitor tree = case tree of
   Document arr -> do
     for_ arr \statement -> visit visitor statement
-  Boundary t -> do
+  ABoundary t -> do
     boundary visitor t
-    for_ t.methods visitMethod
-  Alias t -> do
+    for_ (Bound.methods t) visitMethod
+  AnAlias t -> do
     alias visitor t
-    case t.target of 
-      P.AliasedParam p -> do
+    case Alias.target t of 
+      Alias.AliasedParam p -> do
         visitParam p
         let uw = unwrap p
         for_ uw.args visitParam
-      P.AliasedMap m -> do
+      Alias.AliasedMap m -> do
         visitMap m
         
   where
   visitMethod t = do
     method visitor t
-    for_ t.params visitParam
+    for_ (Method.params t) visitParam
     
   visitParam t = do
     param visitor t
     
   visitMap t = do 
     typeMap visitor t
-    let values = Map.values t
-    for_ values visitParam
+    let params = TypeMap.params t
+    for_ params visitParam
         
 newtype GeneralVisitor = GV GV_
 
 type GV_ = 
-  { boundary :: P.Boundary -> Aff Unit
-  , method :: P.Method -> Aff Unit
+  { boundary :: Boundary -> Aff Unit
+  , method :: Method -> Aff Unit
   , param :: Param -> Aff Unit
-  , alias :: P.Alias -> Aff Unit
-  , typeMap :: P.TypeMap -> Aff Unit
+  , alias :: Alias -> Aff Unit
+  , typeMap :: TypeMap -> Aff Unit
   }
 
 default :: GV_
@@ -97,12 +104,12 @@ instance Visitor GeneralVisitor where
   alias (GV s) = s.alias
   typeMap (GV s) = s.typeMap
   
-allBoundaries :: Tree -> (P.Boundary -> Aff Unit) -> Aff Unit
+allBoundaries :: Tree -> (Boundary -> Aff Unit) -> Aff Unit
 allBoundaries tree prog = do
   let v = GV $ default { boundary = prog }
   visit v tree
 
-allMethods :: Tree -> (P.Method -> Aff Unit) -> Aff Unit
+allMethods :: Tree -> (Method -> Aff Unit) -> Aff Unit
 allMethods tree prog = do
   let v = GV $ default { method = prog }
   visit v tree
@@ -112,12 +119,12 @@ allParams tree prog = do
   let v = GV $ default { param = prog }
   visit v tree
 
-allAliases :: Tree -> (P.Alias -> Aff Unit) -> Aff Unit
+allAliases :: Tree -> (Alias -> Aff Unit) -> Aff Unit
 allAliases tree prog = do
   let v = GV $ default { alias = prog }
   visit v tree
 
-allTypeMaps :: Tree -> (P.TypeMap -> Aff Unit) -> Aff Unit
+allTypeMaps :: Tree -> (TypeMap -> Aff Unit) -> Aff Unit
 allTypeMaps tree prog = do
   let v = GV $ default { typeMap = prog }
   visit v tree

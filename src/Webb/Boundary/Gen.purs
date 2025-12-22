@@ -15,17 +15,18 @@ import Data.Set as Set
 import Data.Tuple (fst, snd)
 import Effect.Aff (Aff, throwError)
 import Webb.Boundary.BoundarySymbols (BoundaryTable)
-import Webb.Boundary.Data.Token as Token
-import Webb.Boundary.Parser as P
-import Webb.Boundary.TypeCheck (methodParams, methodReturn)
-import Webb.Boundary.TypeSymbols (SymbolTable, SymbolType(..))
-import Webb.Boundary.Data.Param (Param)
+import Webb.Boundary.Data.Boundary as Bound
+import Webb.Boundary.Data.Method as Method
 import Webb.Boundary.Data.Param as Param
+import Webb.Boundary.Data.Token as Token
+import Webb.Boundary.TypeSymbols (SymbolTable, SymbolType(..))
 import Webb.Monad.Prelude (forceMaybe')
 import Webb.Stateful (localEffect)
-import Webb.Stateful.ArrayColl (newArray)
+import Webb.Stateful.ArrayColl (ArrayColl, newArray)
 import Webb.Stateful.ArrayColl as Arr
 import Webb.Stateful.MapColl as MC
+import Webb.Boundary.Data.Alias as Alias
+import Webb.Boundary.Data.TypeMap as TypeMap
 
 
 {- Define the data structures and functions that will be used by generators to build code.
@@ -35,8 +36,8 @@ type GenEnv =
   { symbols :: SymbolTable
   , boundaries :: BoundaryTable
   , writable ::
-    { aliases :: Array Alias
-    , boundaries :: Array Boundary
+    { aliases :: Array GenAlias
+    , boundaries :: Array GenBoundary
     }
   }
   
@@ -48,21 +49,23 @@ buildEnv file = do
   pure $ throwError []
 
 
-type Alias = String /\ AliasTarget
+type GenAlias = String /\ GenAliasTarget
 
-data AliasTarget = AliasMap TypeMap | AliasParam Param
+-- Is this useful? Only sort-of, because parameters will refer to aliases ... which
+-- will take us back to normal RecordMaps.
+data GenAliasTarget = AliasMap GenTypeMap | AliasParam Param.Param
 
-type Boundary = String /\ Array FnDef
+type GenBoundary = String /\ Array FnDef
 
-type TypeMap = Map String Param
+type GenTypeMap = Map String Param.Param
 
 type FnDef = 
   { name :: String
-  , args :: Array Param
-  , return :: Param
+  , args :: Array Param.Param
+  , return :: Param.Param
   }
   
-getAliases :: Tree -> Aff (Array Alias)
+getAliases :: Tree -> Aff (Array GenAlias)
 getAliases tree = do
   arr <- newArray
   allAliases tree \alias -> addAlias arr alias
@@ -70,48 +73,49 @@ getAliases tree = do
   
   where
   addAlias arr alias = do
-    let name = Token.text alias.name
-    case alias.target of
-      P.AliasedParam p -> do
+    let name = Alias.name alias
+    case Alias.target alias of
+      Alias.AliasedParam p -> do
         Arr.addLast arr $ name /\ AliasParam p
-      P.AliasedMap m -> do
+      Alias.AliasedMap m -> do
         Arr.addLast arr $ name /\ AliasMap (convert m)
         
   convert map = let
-    pairs = Map.toUnfoldable map :: Array _
+    pairs = TypeMap.pairs map
     converted = pairs <#> uncurry \token param -> Token.text token /\ param
     in Map.fromFoldable converted
 
-getBoundaries :: Tree -> Aff (Array Boundary)
+getBoundaries :: Tree -> Aff (Array GenBoundary)
 getBoundaries tree = do
   boundArray <- newArray
   allBoundaries tree \b -> addBound boundArray b
   aread boundArray
   
   where
+  addBound :: ArrayColl GenBoundary -> Bound.Boundary -> _
   addBound boundArray b = do
-    let name = Token.text b.name
+    let name = Bound.name b
     defArray <- newArray
-    for_ b.methods \m -> addDef defArray m
+    for_ (Bound.methods b) \m -> addDef defArray m
     
     defs <- aread defArray
     Arr.addLast boundArray $ name /\ defs
     
   addDef defArray m = do
-    let name = Token.text m.name
-    args <- methodParams m
-    return <- methodReturn m
+    let name = Method.name m
+        args = Method.firstParams m
+        return = Method.returnParam m
     Arr.addLast defArray { name, args, return }
 
 -- Sort the aliases in order of their dependency on each other. Aliases with
 -- fewer dependencies will come first. This is useful if the generated code
 -- requires earlier types to be earlier in the file.
-sortAliases :: SymbolTable -> Array Alias -> Array Alias
+sortAliases :: SymbolTable -> Array GenAlias -> Array GenAlias
 sortAliases table arr = let
   tierList = aliasTierList table
   in Array.sortWith (tier tierList) arr 
   where
-  tier :: AliasTierList -> Alias -> Int
+  tier :: AliasTierList -> GenAlias -> Int
   tier tierList (name /\ _) = let
     mindex = Array.findIndex (Set.member name) tierList
     in localEffect do 

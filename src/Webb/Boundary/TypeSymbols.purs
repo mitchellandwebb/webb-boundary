@@ -18,11 +18,13 @@ import Effect.Aff.Class (liftAff)
 import Webb.Boundary.Data.Token as Token
 import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.Param as Param
-import Webb.Boundary.Parser (AliasTarget(..), TypeMap)
-import Webb.Boundary.Parser as P
 import Webb.Stateful (localEffect)
 import Webb.Stateful.MapColl (MapColl, newMap)
 import Webb.Stateful.MapColl as M
+import Webb.Boundary.Data.Alias (Alias)
+import Webb.Boundary.Data.Alias as Alias
+import Webb.Boundary.Data.TypeMap (TypeMap)
+import Webb.Boundary.Data.TypeMap as TypeMap
 
 
 {- Define the basic symbols in the global space, and their type representations. If we do _nominal_ type-checking, this is easy -- each type is just represented by a simple integer or string, and types are the same as long as they refer to the same value. There is no need, when doing type-checking, to do any structural comparisons. 
@@ -86,23 +88,23 @@ run env prog = void $ prog # runExceptT >>> flip runStateT env
 eval :: forall a. Env -> Prog a -> Aff (Either (Array String) a)
 eval env prog = prog # runExceptT >>> flip evalStateT env
   
-declareAlias :: P.Alias -> Prog Unit
+declareAlias :: Alias -> Prog Unit
 declareAlias alias = do
   this <- mread
-  let name = Token.text alias.name
+  let name = Alias.name alias
   whenM (M.member this.symbols name) do
     throwError [ alreadyDefined name ]
 
-  case alias.target of
-    AliasedParam wrapped -> do
+  case Alias.target alias of
+    Alias.AliasedParam wrapped -> do
       M.insert this.symbols name (ALIAS wrapped)
-    AliasedMap m -> do
+    Alias.AliasedMap m -> do
       M.insert this.symbols name (RECORD $ convert m)
       
   where
   convert :: TypeMap -> Map String SymbolType
   convert map = let 
-    pairs = Map.toUnfoldable map :: Array _
+    pairs = TypeMap.pairs map
     converted = pairs <#> uncurry \token wrapped -> 
       let name = Token.text token
       in name /\ ALIAS wrapped

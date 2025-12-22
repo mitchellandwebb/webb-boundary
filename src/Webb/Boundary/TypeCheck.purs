@@ -12,15 +12,16 @@ import Data.Foldable (for_)
 import Data.Map as Map
 import Effect.Aff (Aff, throwError)
 import Effect.Aff.Class (class MonadAff, liftAff)
-import Effect.Class (class MonadEffect, liftEffect)
-import Webb.Boundary.Data.Token as Token
-import Webb.Boundary.Parser as P
+import Webb.Boundary.Data.Method (Method)
+import Webb.Boundary.Data.Method as Method
 import Webb.Boundary.TypeSymbols as TS
-import Webb.Monad.Prelude (forceMaybe')
 import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.Param as Param
 import Webb.Stateful.ArrayColl (ArrayColl, newArray)
 import Webb.Stateful.ArrayColl as Arr
+import Webb.Boundary.Data.Alias (Alias)
+import Webb.Boundary.Data.Alias as Alias
+import Webb.Boundary.Data.TypeMap as TypeMap
 
 
 {- Once all global type symbols have been defined, we can start checking
@@ -130,14 +131,14 @@ checkCircularAlias name p = do
 -- Alias definitions must not be circular. They cannot eventually refer
 -- back to themselves in their concrete type, in _any_ of the parameters.
 -- Because if they do, we can't successfully write out the type.
-noCircularAlias :: P.Alias -> Check Unit
+noCircularAlias :: Alias -> Check Unit
 noCircularAlias al = do 
-  let name = Token.text al.name
-  case al.target of 
-    P.AliasedParam p -> do
+  let name = Alias.name al
+  case Alias.target al of 
+    Alias.AliasedParam p -> do
       checkCircularAlias name p
-    P.AliasedMap m -> do
-      let params = Map.values m
+    Alias.AliasedMap m -> do
+      let params = TypeMap.params m
       for_ params \p -> do
         checkCircularAlias name p
 
@@ -172,10 +173,10 @@ typeCheckParam param = do
         
 -- We check each method for correct usage of types. Some usages
 -- are currently illegal.
-illegalMethod :: P.Method -> Check Unit
+illegalMethod :: Method -> Check Unit
 illegalMethod m = do 
-  args <- methodParams m
-  return <- methodReturn m
+  let args = Method.firstParams m
+      return = Method.returnParam m
   
   for_ args noEffectOrAff
 
@@ -201,13 +202,3 @@ illegalMethod m = do
     name <- resolve $ Param.name param
     expect (name == "Effect" || name == "Aff")
       "Function return type must be Aff or Effect"
-
-methodParams :: forall m. MonadEffect m => P.Method -> m (Array Param)
-methodParams method = liftEffect do
-  let minit = A.init method.params
-  forceMaybe' "No function parameters were provided" minit
-  
-methodReturn :: forall m. MonadEffect m => P.Method -> m Param
-methodReturn method = liftEffect do
-  let mlast = A.last method.params
-  forceMaybe' "No function parameters were provided" mlast
