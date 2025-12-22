@@ -11,8 +11,8 @@ import Data.Set as Set
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
 import Webb.Boundary.Data.Boundary (Boundary)
-import Webb.Boundary.Data.Boundary as Boundary
-import Webb.Boundary.Data.BoundaryTable (BoundaryTable, BTable)
+import Webb.Boundary.Data.Boundary as Bd
+import Webb.Boundary.Data.BoundaryTable (BTable)
 import Webb.Boundary.Data.BoundaryTable as BTable
 import Webb.Boundary.Data.Method as Method
 import Webb.Boundary.Data.SymbolTable (STable)
@@ -40,7 +40,7 @@ eval env prog = prog # runExceptT >>> flip evalStateT env
 
 -- Get the table of all boundaries, and their methods.
 getGlobalBoundaryTable :: 
-  Tree -> STable -> Aff (Either (Array String) BoundaryTable)
+  Tree -> STable -> Aff (Either (Array String) BTable)
 getGlobalBoundaryTable tree symbols = do 
   table <- newShowRef BTable.emptyTable
   let 
@@ -69,7 +69,7 @@ noDuplicates :: Prog Unit
 noDuplicates = do
   this <- mread
   dupBounds <- BTable.duplicates <: this.table
-  let boundErrors = (alreadyDefined <<< Boundary.name) <$> dupBounds
+  let boundErrors = (alreadyDefined <<< Bd.name) <$> dupBounds
   tryThrow boundErrors
     
   dupMethods <- BTable.duplicateMethods <: this.table
@@ -84,7 +84,7 @@ noSymbolClash = do
   this <- mread
   boundaries <- BTable.boundaries <: this.table
   let
-    bnames = Set.fromFoldable $ Boundary.name <$> boundaries
+    bnames = Set.fromFoldable $ Bd.name <$> boundaries
     snames = Set.fromFoldable $ STable.symbols this.symbols
     shared = Array.fromFoldable $ Set.intersection bnames snames
     errors = shared <#> alreadyDefined
