@@ -20,7 +20,7 @@ import Webb.Boundary.Parser as Parser
 import Webb.Boundary.Tokens as Tokens
 import Webb.Boundary.Tree as Tree
 import Webb.Boundary.TypeCheck as TypeCheck
-import Webb.Boundary.TypeSymbols as TypeSymbols
+import Webb.Boundary.TypeSymbols as TSymbols
 import Webb.Monad.Prelude (forceMaybe')
 import Webb.Stateful (localEffect)
 
@@ -39,7 +39,7 @@ buildEnv :: String -> Aff (Either (Array String) Env)
 buildEnv file = runExceptT do
   tokens <- Tokens.tokens file
   tree <- abort' $ Parser.parseTokens tokens Tree.treeParser
-  symbols <- abort $ TypeSymbols.buildSymbolTable tree
+  symbols <- abort $ TSymbols.buildSymbolTable tree
   boundaries <- abort $ BSymbols.buildBoundaryTable tree symbols
   _ <- abort $ TypeCheck.runTypeCheck symbols tree
   let env = { tree, symbols, boundaries }
