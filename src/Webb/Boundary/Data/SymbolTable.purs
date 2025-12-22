@@ -15,7 +15,7 @@ import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Show.Generic (genericShow)
-import Data.Tuple (Tuple, fst, snd, uncurry)
+import Data.Tuple (Tuple, uncurry)
 import Data.Tuple.Nested ((/\), type (/\))
 import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.Param as Param
