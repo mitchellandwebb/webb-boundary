@@ -3,23 +3,34 @@ module Webb.Boundary.Tree where
 import Webb.Boundary.Prelude
 
 import Data.Foldable (for_)
+import Data.Generic.Rep (class Generic)
 import Data.Newtype (unwrap)
+import Data.Show.Generic (genericShow)
 import Effect.Aff (Aff)
+import Webb.Boundary.Data.Alias (Alias)
+import Webb.Boundary.Data.Alias as Alias
 import Webb.Boundary.Data.Boundary (Boundary)
 import Webb.Boundary.Data.Boundary as Bound
 import Webb.Boundary.Data.Method (Method)
 import Webb.Boundary.Data.Method as Method
-import Webb.Boundary.Parser as P
 import Webb.Boundary.Data.Param (Param)
-import Webb.Boundary.Data.Alias (Alias)
-import Webb.Boundary.Data.Alias as Alias
 import Webb.Boundary.Data.TypeMap (TypeMap)
 import Webb.Boundary.Data.TypeMap as TypeMap
+import Webb.Boundary.Parser as P
 
 data Tree 
   = Document (Array Tree)
   | ABoundary Boundary
   | AnAlias Alias
+  
+derive instance Eq Tree
+derive instance Ord Tree
+derive instance Generic Tree _
+instance Show Tree where 
+  show tree = case tree of
+    Document trees -> "Document " <> show trees
+    x -> genericShow x
+
   
 treeParser :: P.Parse Tree
 treeParser = do

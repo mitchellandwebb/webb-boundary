@@ -50,3 +50,9 @@ symbols param = localEffect do
   Fold.for_ (args param) \arg -> do
     ArrayColl.addAllLast array (symbols arg)
   aread array
+  
+isEffect :: Param -> Boolean
+isEffect param = (name param == "Effect")
+
+isAff :: Param -> Boolean
+isAff param = (name param == "Aff")

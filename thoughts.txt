@@ -120,5 +120,44 @@ so that all types using them will definitely be declared, and since boundaries t
 are not actual types that can be used in other types. But how do we represent them? Well, they're already well-represented enough in the boundary table, even if they're out-of-order. But we don't need them to be in lookup tables -- we just need arrays of the data that we
 can iterate over simply, along with the names. So there's nothing special needed there.
 
+If we want to compile the Boundary and Alias declarations into Kotlin, we can try, but we lack certain kinds of knowledge. In particular, we lack knowledge of the language. What _is_ Kotlin? What constructs are we interested in? And what does it mean to work with them? With Kotlin, we are interested in a few different things. First, we're interested in the representation of a Boundary as a Kotlin Interface. What does it mean to do so? Well, the
+interface has:
+
+- Name
+- IsAsync
+- Function*
+  - Name
+  - Arg*
+    - Type*
+  - Return
+    - Type*
+    
+This is ... fairly easy, for most of it, to transform a Boundary into a Kotlin Interface data structure. The hard part is the `Type*`. This could be one of ... many things. But in terms of _data_ -- what Kotlin thinks it is -- it's quite simple. It's a 
+
+```
+{ name :: String, args :: Array String }
+```
+
+Surprisingly, that's all that's needed! A primary type name, and any type arguments that
+are applied. Thus, an `Array Int` becomes a Kotlin `{ name: "List", args: [ Int ]}`, which
+is written to file as `List<Int>`. Yet it's not that simple. Type arguments can be recursive, and so we have a Kotlin version of Param:
+
+```
+{ name :: String, args :: Array Param }
+```
+
+This recursive parameter can thus become a nested printout of a filled generic type. The next question is how we ultimately _transform_ the Params into Kotlin Params, but we'll table that discussion until after we know what Aliases are -- since Aliases will also need the answer to that question.
+
+So for aliases, we have a name, and a concrete type. But not always. Sometimes the concrete type is really just a Param. In which case we go back to the discussion above. But it might also be a Record Map. In that case, we need to define a _Data Class_; that is,
+
+- Name 
+  - Param*
+    - Name
+    - Type*
+    
+That's it! Something is recursive about it. But the type itself might include Aliases ... so what really matters is that we can convert _any_ Param into the Kotlin type -- just the correct strings.
+
+So how do we convert it? Well, we just start with our normal Param, and convert it to the KotlinParam. But to get the _actual_ type for Kotlin, we need the concept of Kotlin symbol lookup -- where each formal Symbol we have can find a lookup as a Kotlin type. We need ways to _ask questions_ ... but to ask them in a general way; to ask them in conceptual forms. Thus, we need different kinds of knowledge -- the Env, and a lookup table from simple strings from our application to Kotlin strings for OOB types. This is NOT the same as as aliases -- just the ability to transform Params to KotlinParams.
+
 TODO -- tokenizing. TypeName and FunctionName are last ... but they also match the keywords.
 So ... will that work out? Or do they have to be merged?

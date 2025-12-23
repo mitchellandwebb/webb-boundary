@@ -50,6 +50,7 @@ _array = prop (Proxy :: Proxy "array")
 derive newtype instance Eq SymbolTable
 derive newtype instance Ord SymbolTable
 derive instance Newtype SymbolTable _
+derive newtype instance Show SymbolTable
 
 emptyTable :: SymbolTable
 emptyTable = wrap { map: Map.empty, array: [] }
@@ -164,6 +165,13 @@ isProduct sym table = fromMaybe false do
   t <- lookup sym table
   case t of
     PRODUCT _ -> pure true
+    _ -> pure false
+
+isAlias :: String -> SymbolTable -> Boolean
+isAlias sym table = fromMaybe false do
+  t <- lookup sym table
+  case t of
+    ALIAS _ -> pure true
     _ -> pure false
     
 -- Resolves the symbol to a higher type, bypassing aliases
