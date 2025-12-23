@@ -34,13 +34,11 @@ args = unwrap >>> _.args
   
 -- Print the parameter as a string, like `List<A, B>` or `Int`
 asKotlinString :: KotlinParam -> String
-asKotlinString param = let 
-  name' = name param
-  args' = args param
-  in if args' == [] then
-    name'
+asKotlinString param =
+  if args param == [] then
+    name param 
   else let 
     -- Might be slow without a string builder, but oh well.
-    argStrings = asKotlinString <$> args'   
+    argStrings = asKotlinString <$> args param
     joined = String.joinWith ", " argStrings
-  in name' <> "<" <> joined <> ">"
+  in name param <> "<" <> joined <> ">"

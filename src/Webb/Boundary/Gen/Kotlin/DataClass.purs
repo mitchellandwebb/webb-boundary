@@ -55,9 +55,7 @@ fromAlias alias cv = do
   
 asKotlinString :: KDataClass -> String
 asKotlinString kdc = let
-  name' = name kdc
-  params' = params kdc
-  pStrings = String.joinWith ", " $ params' <#> uncurry convert
-  in "data class " <> name' <> "(" <> pStrings <> ")"
+  pStrings = String.joinWith ", " $ params kdc <#> uncurry convert
+  in "data class " <> name kdc <> "(" <> pStrings <> ")"
   where
   convert n param = "val " <> n <> ": " <> KParam.asKotlinString param

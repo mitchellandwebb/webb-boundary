@@ -45,7 +45,5 @@ fromAlias alias cv = do
       Nothing
 
 asKotlinString :: KotlinAlias -> String
-asKotlinString alias = let 
-  name' = name alias
-  param' = param alias
-  in "typealias " <> name' <> " = " <> KParam.asKotlinString param'
+asKotlinString alias = 
+  "typealias " <> name alias <> " = " <> KParam.asKotlinString (param alias)
