@@ -4,6 +4,7 @@ import Prelude
 
 import Data.Foldable as Fold
 import Data.Newtype (class Newtype, unwrap)
+import Webb.Boundary.Data.Boundary as Bd
 import Webb.Boundary.Gen.Kotlin.Param (KParam)
 import Webb.Writer as Writer
 
@@ -34,6 +35,8 @@ name = unwrap >>> _.name
 methods :: KInterface -> Array KotlinMethod
 methods = unwrap >>> _.methods
 
+fromBoundary :: Bd.Boundary -> KInterface
+fromBoundary = unit
 
 -- Convert the interface into a multiline string.
 asKotlinString :: KInterface -> String
