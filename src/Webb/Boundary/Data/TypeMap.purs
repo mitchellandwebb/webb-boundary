@@ -6,7 +6,8 @@ import Data.Array as Array
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Newtype (class Newtype, unwrap, wrap)
-import Data.Tuple (Tuple)
+import Data.Tuple (Tuple, uncurry)
+import Data.Tuple.Nested ((/\))
 import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.Token (Token)
 import Webb.Boundary.Data.Token as Token
@@ -38,3 +39,7 @@ asMap = unwrap
 pairs :: TypeMap -> Array (Tuple Token Param)
 pairs = unwrap >>> Map.toUnfoldable
 
+recordPairs :: TypeMap -> Array (Tuple String Param)
+recordPairs m = m # pairs >>> map (uncurry convert)
+  where
+  convert token param = Token.text token /\ param

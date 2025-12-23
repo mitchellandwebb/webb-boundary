@@ -19,6 +19,8 @@ newtype KotlinAlias = KA
   , param :: KotlinParam
   }
   
+type KAlias = KotlinAlias
+  
 derive newtype instance Eq KotlinAlias
 derive newtype instance Ord KotlinAlias
 derive newtype instance Show KotlinAlias
