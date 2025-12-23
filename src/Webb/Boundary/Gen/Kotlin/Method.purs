@@ -77,12 +77,12 @@ asKotlinString method = let
   returnString = KParam.asKotlinString $ return method
   in do
     when (isAsync method) do
-      Writer.write "suspend" 
-    Writer.writes ["fun", name method]
+      Writer.word "suspend" 
+    Writer.words ["fun", name method]
     Writer.write "("
     Writer.write argStrings 
     Writer.write "):"
-    Writer.write returnString
+    Writer.word returnString
   where
   convertArg name kparam = 
     name <> ": " <> KParam.asKotlinString kparam

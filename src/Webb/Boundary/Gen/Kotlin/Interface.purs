@@ -43,11 +43,12 @@ asKotlinString :: KInterface -> String
 asKotlinString kt = let
   methodStrings = KMethod.asKotlinString <$> methods kt
   in do 
-    Writer.write "interface " <> name kt <> "{"
+    Writer.words ["interface", name kt, "{"]
+    Writer.newline
     Writer.indent 2 do
       Writer.newline
       Fold.for_ methodStrings \m ->
         Writer.write m
         Writer.newline
-    Writer.write "}"
+    Writer.word "}"
   
