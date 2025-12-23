@@ -41,11 +41,9 @@ fromBoundary = unit
 -- Convert the interface into a multiline string.
 asKotlinString :: KInterface -> String
 asKotlinString kt = let
-  name' = name kt
-  methods' = methods kt
-  methodStrings = KMethod.asKotlinString methods'
+  methodStrings = KMethod.asKotlinString <$> methods kt
   in do 
-    Writer.write "interface " <> name' <> "{"
+    Writer.write "interface " <> name kt <> "{"
     Writer.indent 2 do
       Writer.newline
       Fold.for_ methodStrings \m ->

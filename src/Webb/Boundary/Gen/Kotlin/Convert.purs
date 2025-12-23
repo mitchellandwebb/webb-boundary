@@ -27,6 +27,9 @@ derive newtype instance Show Converter
 symbolTable :: Converter -> STable
 symbolTable = unwrap >>> _.symbols
 
+isAsync :: Param -> Converter -> Boolean
+isAsync param _cv = Param.isAff param
+
 kotlinParam :: Param -> Converter -> KotlinParam
 kotlinParam = convert
 
