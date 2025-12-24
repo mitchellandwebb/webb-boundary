@@ -14,8 +14,7 @@ import Webb.Boundary.Gen.Kotlin.Convert (Converter)
 import Webb.Boundary.Gen.Kotlin.Convert as Convert
 import Webb.Boundary.Gen.Kotlin.Param (KotlinParam)
 import Webb.Boundary.Gen.Kotlin.Param as KParam
-import Webb.State.Prelude (newShowRef)
-import Webb.Stateful (localEffect)
+import Webb.Writer as Writer
 
 
 {- Defines a kotlin method, how we obtain it, and how it becomes a string. -}
@@ -75,7 +74,7 @@ asKotlinString :: KMethod -> String
 asKotlinString method = let
   argStrings = String.joinWith ", " (args method <#> uncurry convertArg)
   returnString = KParam.asKotlinString $ return method
-  in do
+  in Writer.runToString do
     when (isAsync method) do
       Writer.word "suspend" 
     Writer.words ["fun", name method]
@@ -84,5 +83,5 @@ asKotlinString method = let
     Writer.write "):"
     Writer.word returnString
   where
-  convertArg name kparam = 
-    name <> ": " <> KParam.asKotlinString kparam
+  convertArg name' kparam = 
+    name' <> ": " <> KParam.asKotlinString kparam

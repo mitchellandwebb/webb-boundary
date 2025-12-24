@@ -38,7 +38,8 @@ workspace:
     webb-refer:
       path: ../webb-refer
     webb-monad: 0.0.2
-    webb-writer: 0.0.1
+    webb-writer:
+      path: ../webb-writer
     webb-stateful: 0.0.2
     webb-random: 0.0.1
     webb-parsing: 

@@ -780,7 +780,9 @@
       },
       "webb-stateful": "0.0.2",
       "webb-test": "0.0.1",
-      "webb-writer": "0.0.1"
+      "webb-writer": {
+        "path": "../webb-writer"
+      }
     }
   },
   "packages": {
@@ -2051,16 +2053,17 @@
       ]
     },
     "webb-writer": {
-      "type": "registry",
-      "version": "0.0.1",
-      "integrity": "sha256-Q7kEYzY0gWExUUhJxgm21xmzBYlYouyqcxmtzc8LT64=",
+      "type": "local",
+      "path": "../webb-writer",
       "dependencies": [
         "aff",
         "arrays",
         "effect",
         "foldable-traversable",
+        "identity",
         "maybe",
         "monad-loops",
+        "newtype",
         "node-buffer",
         "node-fs",
         "node-path",
@@ -2070,6 +2073,7 @@
         "strings",
         "transformers",
         "tuples",
+        "unicode",
         "unsafe-coerce",
         "webb-monad",
         "webb-refer"
