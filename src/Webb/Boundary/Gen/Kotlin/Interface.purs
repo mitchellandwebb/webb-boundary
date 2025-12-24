@@ -3,11 +3,12 @@ module Webb.Boundary.Gen.Kotlin.Interface where
 import Prelude
 
 import Data.Foldable as Fold
-import Data.Newtype (class Newtype, unwrap)
+import Data.Newtype (class Newtype, unwrap, wrap)
 import Webb.Boundary.Data.Boundary as Bd
+import Webb.Boundary.Data.Method (Method)
+import Webb.Boundary.Gen.Kotlin.Convert (Converter)
 import Webb.Boundary.Gen.Kotlin.Method (KMethod)
 import Webb.Boundary.Gen.Kotlin.Method as KMethod
-import Webb.Boundary.Gen.Kotlin.Param (KParam)
 import Webb.Writer as Writer
 
 {- Conversion of a boundary to a kotlin interface. -}
@@ -31,8 +32,12 @@ methods :: KInterface -> Array KMethod
 methods = unwrap >>> _.methods
 
 -- Create the interface from a boundary object's data.
-fromBoundary :: Bd.Boundary -> KInterface
-fromBoundary = unit
+fromBoundary :: Bd.Boundary -> Converter -> KInterface
+fromBoundary b cv = let
+  methods' = Bd.methods b :: Array Method
+  kmethods = flip KMethod.fromMethod cv <$> methods' 
+  in wrap { name: Bd.name b, methods: kmethods }
+  
 
 -- Convert the interface into a multiline string.
 asKotlinString :: KInterface -> String
@@ -43,7 +48,7 @@ asKotlinString kt = let
     Writer.newline
     Writer.indent 2 do
       Writer.newline
-      Fold.for_ methodStrings \m ->
+      Fold.for_ methodStrings \m -> do
         Writer.write m
         Writer.newline
     Writer.word "}"
