@@ -61,30 +61,3 @@ abort prog = do
   case either of
     Left errors -> do throwError errors
     Right a -> pure a
-
--- From the environment, obtain an array of the declared aliases
-getAliases :: Env -> Aff (Array Alias)
-getAliases env = do
-  let aliases = STable.aliases env.symbols
-  pure aliases
-
--- Get the boundaries. We can iterate over the data type using the contained knowledge, 
--- to get all the data we need to write the data.
-getBoundaries :: Env -> Aff (Array Boundary)
-getBoundaries env = do
-  let bounds = BTable.boundaries env.boundaries
-  pure bounds
-  
--- Sort the aliases in order of their dependency on each other. Aliases with
--- fewer dependencies will come first. This is useful if the generated code
--- requires earlier types to be earlier in the file.
-sortAliases :: STable -> Array Alias -> Array Alias
-sortAliases table arr = let
-  tierList = STable.newTierList table
-  in Array.sortWith (tier tierList) arr 
-  where
-  tier :: STable.AliasTierList -> Alias -> Int
-  tier tierList alias = let
-    mtier = STable.tier (Alias.name alias) tierList
-    in localEffect do 
-      forceMaybe' ("Alias wasn't found in any tier: " <> show (Alias.name alias)) mtier
