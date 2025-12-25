@@ -1,34 +1,37 @@
 module Webb.Boundary.Gen where
 
-import Webb.Boundary.Prelude
 import Webb.Boundary.Data.Tree
+import Webb.Boundary.Prelude
 
-import Control.Monad.Except (ExceptT, runExceptT)
-import Data.Array as Array
-import Data.Either (Either(..))
-import Effect.Aff (Aff, throwError)
-import Effect.Aff.Class (liftAff)
-import Webb.Boundary.Analyzer.BoundarySymbols as BSymbols
+import Control.Alt ((<|>))
 import Webb.Boundary.Data.Alias (Alias)
-import Webb.Boundary.Data.Alias as Alias
 import Webb.Boundary.Data.Boundary (Boundary)
-import Webb.Boundary.Data.BoundaryTable (BTable)
-import Webb.Boundary.Data.BoundaryTable as BTable
-import Webb.Boundary.Data.SymbolTable (STable)
-import Webb.Boundary.Data.SymbolTable as STable
-import Webb.Boundary.Parser.Parser as Parser
-import Webb.Boundary.Parser.Tokens as Tokens
-import Webb.Boundary.Data.Tree as Tree
-import Webb.Boundary.Analyzer.TypeCheck as TypeCheck
-import Webb.Boundary.Analyzer.TypeSymbols as TSymbols
+import Webb.Boundary.Gen.Alias as GAlias
+import Webb.Boundary.Gen.Interface as GInt
+import Webb.Boundary.Gen.Lang as Lang
+import Webb.Boundary.Gen.Record as GRecord
 import Webb.Monad.Prelude (forceMaybe')
 import Webb.Stateful (localEffect)
 
 
-{- Define the data structures and functions that will be used by generators 
-  to build code.
+{- Generating final strings using a language
 -}
 
+fromAlias :: Lang.Lang_ -> Alias -> String
+fromAlias lang alias = let
+  malias = Lang.writeAlias lang <$> GAlias.fromAlias lang alias :: _ String
+  mrecord = Lang.writeRecord lang <$> GRecord.fromAlias lang alias :: _ String
+  mcode = malias <|> mrecord
+  in localEffect do
+    forceMaybe' ("Unknown alias" <> show alias) mcode
+    
+
+fromBoundary :: Lang.Lang_ -> Boundary -> String
+fromBoundary lang bound = let 
+  interface = GInt.fromBoundary lang bound
+  in Lang.writeInterface lang interface
+
+{-
 type Env = 
   { symbols :: STable
   , boundaries :: BTable
@@ -61,3 +64,4 @@ abort prog = do
   case either of
     Left errors -> do throwError errors
     Right a -> pure a
+-}

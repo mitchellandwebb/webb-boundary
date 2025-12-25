@@ -20,6 +20,8 @@ package:
     - webb-stateful
     - webb-random
     - webb-parsing
+    - webb-file
+    - webb-directory
     - profunctor-lenses
     - parsing
   test:
@@ -44,3 +46,7 @@ workspace:
     webb-random: 0.0.1
     webb-parsing: 
       path: ../webb-parsing
+    webb-file: 
+      path: ../webb-file
+    webb-directory:
+      path: ../webb-directory
