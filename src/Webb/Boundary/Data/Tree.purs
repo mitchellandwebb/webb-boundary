@@ -1,4 +1,4 @@
-module Webb.Boundary.Tree where
+module Webb.Boundary.Data.Tree where
 
 import Webb.Boundary.Prelude
 
@@ -16,7 +16,6 @@ import Webb.Boundary.Data.Method as Method
 import Webb.Boundary.Data.Param (Param)
 import Webb.Boundary.Data.TypeMap (TypeMap)
 import Webb.Boundary.Data.TypeMap as TypeMap
-import Webb.Boundary.Parser as P
 
 data Tree 
   = Document (Array Tree)
@@ -30,12 +29,6 @@ instance Show Tree where
   show tree = case tree of
     Document trees -> "Document " <> show trees
     x -> genericShow x
-
-  
-treeParser :: P.Parse Tree
-treeParser = do
-  trees <- mix [ ABoundary <$> P.boundary, AnAlias <$> P.alias ]
-  pure $ Document trees
   
 class Visitor a where
   boundary :: a -> Boundary -> Aff Unit

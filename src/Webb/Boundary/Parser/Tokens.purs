@@ -1,4 +1,4 @@
-module Webb.Boundary.Tokens where
+module Webb.Boundary.Parser.Tokens where
 
 import Webb.Boundary.Prelude
 

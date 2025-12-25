@@ -1,8 +1,8 @@
-module Webb.Boundary.TypeSymbols where
+module Webb.Boundary.Analyzer.TypeSymbols where
 
 import Prelude
 import Webb.Boundary.Prelude
-import Webb.Boundary.Tree
+import Webb.Boundary.Data.Tree
 
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (StateT, evalStateT, runStateT)
