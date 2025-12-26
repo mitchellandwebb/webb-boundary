@@ -21,6 +21,7 @@ import Webb.Boundary.Data.Rep as Rep
 import Webb.Boundary.Data.SymbolTable (SymbolTable)
 import Webb.Boundary.Gen.Lang as Lang
 import Webb.Boundary.Lang.Kotlin as Kotlin
+import Webb.Boundary.Lang.Typescript as Typescript
 import Webb.Boundary.Parser as Parser
 import Webb.Monad.Prelude (timesRepeat_)
 import Webb.State.Prelude (mread)
@@ -102,7 +103,7 @@ writeKotlin params = do
       timesRepeat_ 2 do SWriter.newline
       
 writeTypescript :: TsParams -> Prog Unit
-writeTypescript params = do
+writeTypescript params = do -- TODO #2 -- what about params?
   symbolTable <- getSymbolTable
   codeWriter <- getCodeWriter $ Typescript.tsLang symbolTable
 

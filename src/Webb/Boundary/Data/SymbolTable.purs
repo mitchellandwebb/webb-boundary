@@ -66,6 +66,7 @@ predefined = wrap
     , "Number" /\ DOUBLE
     , "Double" /\ DOUBLE
     , "String" /\ STRING
+    , "Unit" /\ UNIT
 
     , "Array" /\ PRODUCT 1
     , "Map" /\ PRODUCT 2
@@ -85,6 +86,7 @@ data SymbolType
   | DOUBLE
   | BOOL
   | STRING
+  | UNIT
   | PRODUCT Int
   | ALIAS Alias
   
