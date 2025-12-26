@@ -7,6 +7,7 @@ import Data.Newtype (class Newtype, unwrap, wrap)
 import Webb.Boundary.Data.Alias (Alias)
 import Webb.Boundary.Data.Alias as Alias
 import Webb.Boundary.Data.Boundary (Boundary)
+import Webb.Boundary.Data.Boundary as Bd
 import Webb.Boundary.Data.BoundaryTable (BTable)
 import Webb.Boundary.Data.BoundaryTable as BTable
 import Webb.Boundary.Data.SymbolTable (STable)
@@ -69,3 +70,9 @@ sortedAliases rep = let
     notFound = "Alias wasn't found in any tier: " <> show (Alias.name alias)
     in localEffect do 
       forceMaybe' notFound mtier
+
+allDeclarationNames :: Rep -> Array String
+allDeclarationNames rep = let
+  aliases = sortedAliases rep
+  bounds = boundaries rep
+  in (Alias.name <$> aliases) <> (Bd.name <$> bounds)

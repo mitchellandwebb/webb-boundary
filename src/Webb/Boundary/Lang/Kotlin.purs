@@ -17,6 +17,7 @@ import Webb.Boundary.Data.SymbolTable (STable)
 import Webb.Boundary.Data.SymbolTable as STable
 import Webb.Boundary.Gen.Alias as GAlias
 import Webb.Boundary.Gen.Interface as GInt
+import Webb.Boundary.Gen.Lang (Lang_)
 import Webb.Boundary.Gen.Lang as Lang
 import Webb.Boundary.Gen.Method as GMethod
 import Webb.Boundary.Gen.Param as GParam
@@ -31,6 +32,9 @@ derive instance Newtype Kotlin _
 
 kotlin :: STable -> Kotlin
 kotlin table = K table
+
+kotlinLang :: STable -> Lang_
+kotlinLang table = Lang.wrap $ kotlin table
 
 symbolTable :: Kotlin -> STable
 symbolTable = unwrap
