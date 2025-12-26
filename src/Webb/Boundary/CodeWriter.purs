@@ -4,13 +4,12 @@ import Prelude
 
 import Data.Foldable as Fold
 import Data.Newtype (class Newtype, unwrap)
-import Effect.Aff.Class (class MonadAff)
+import Effect.Aff (Aff)
+import Effect.Aff.Class (class MonadAff, liftAff)
 import Webb.Boundary.Data.Rep (Rep)
 import Webb.Boundary.Data.Rep as Rep
 import Webb.Boundary.Gen as Gen
 import Webb.Boundary.Gen.Lang (Lang_)
-import Webb.File (File)
-import Webb.File as File
 import Webb.Monad.Prelude (timesRepeat_)
 import Webb.Writer (SWriter)
 import Webb.Writer as SWriter
@@ -23,43 +22,31 @@ newtype CodeWriter = C CodeWriter_
 
 type CodeWriter_ = 
   { rep :: Rep
-  , file :: File
+  , writeToFile :: String -> Aff Unit
   , lang :: Lang_
   }
   
 derive instance Newtype CodeWriter _
   
 newCodeWriter :: forall m. MonadAff m => 
-  Rep -> File -> Lang_ -> m CodeWriter
-newCodeWriter rep file lang = do
-  pure $ C { rep, file, lang }
-  
-open :: forall m. MonadAff m => 
-  CodeWriter -> m Unit
-open cw = do
-  let s = unwrap cw
-  File.openTruncated s.file
-  
-close :: forall m. MonadAff m => 
-  CodeWriter -> m Unit
-close cw = do
-  let s = unwrap cw
-  File.close s.file
+  Rep -> (String -> Aff Unit) -> Lang_ -> m CodeWriter
+newCodeWriter rep writeToFile lang = do
+  pure $ C { rep, writeToFile, lang }
   
 -- Write arbitrary code to the file. Useful for language-specific code
 -- that isn't dependent on the code representation.
 write :: forall m. MonadAff m => 
   CodeWriter -> SWriter Unit -> m Unit
-write cw prog = do
+write cw prog = liftAff do
   let s = unwrap cw
       code = SWriter.runToString prog
-  File.writeString s.file code
+  s.writeToFile code
 
 writeString :: forall m. MonadAff m => 
   CodeWriter -> String -> m Unit
-writeString cw str = do
+writeString cw str = liftAff do
   let s = unwrap cw
-  File.writeString s.file str
+  s.writeToFile str
   
 -- Write the aliases to file.
 writeAliases :: forall m. MonadAff m =>

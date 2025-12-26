@@ -3,7 +3,13 @@ module Webb.Boundary.Main.Kotlin where
 import Prelude
 
 {-
-What ... model is needed to start writing the Kotlin to file?
+What ... model is needed to start writing the Kotlin to file? What shared
+model? What language is needed? How do we merge with the need for Files and 
+Dirs, or is there anything going on? What data is actually needed? Without
+well-defined data, we can't know the scope of what we're doing. But we can only
+proceed from what is _known_. 
+  We can know more, or less. We might know all Options for a Command-Line target. But that's a lot of options, and probably too much. But what's more likely is that we need models for handling less information about what's happening. For example, we might only know about a single source file, or we might know about multiple source files and target files.
+  But what's even more odd is that there isn't really ... just one way to do this. Different starting points of knowledge lead to different things we need to do to obtain the proper user experience. And even for CodeWriter, it's still not necessarily certain that we need to specify a _concrete file_ to existence. We could just write to an abstract file instead; in fact, we probably should to be compatible with more possibilities.
 -}
 
 {-
