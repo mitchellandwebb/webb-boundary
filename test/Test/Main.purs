@@ -10,3 +10,7 @@ main = do
   log "🍕"
   log "You should add some tests."
 
+
+hello :: Effect Unit
+hello = do
+  log "Hello, world!"

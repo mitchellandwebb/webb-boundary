@@ -161,6 +161,13 @@ So how do we convert it? Well, we just start with our normal Param, and convert 
 
 Okay. So now we can transform each of the "Kotlin" Params into a String. But the thing is ... they don't seem particularly like kotlin-specific parameters, or methods, or interfaces. They seem very-generalized representations of the final types in abstract form, and can be translated into any language. So there's no reason to keep them as they are. Instead, they each represent a generalized concept of a type -- an Interface, Method, Record, or Type parameter. And these are all we need to write them out; this intermediate representation is easy to convert to the target languages we're interested in. 
   But that means we have to answer the question of how each node of the Parse tree becomes the generalized form. And that varies by the _converter_ that is used. The converter is thus a unique type that specifically knows how to convert a _Param_ into a generalized param, since what needs replacing are the types used by the target language -- and that's all. It's more of a ... type-replacer, than anything else. After that, the conversion of each Generalized structure is defined per-structure for each language. Thus, our definition of each language defines a way to convert a Param to a GParam, and a way to turn each GStructure into a String (they rely on each other). And each GStructure defines, on its own, how to obtain itself from a Converter data structure, which is generalized and initialized from a language definition.
+  
+What we need right now... are 
+
+- Ability to execute any purescript namespace's function with ease, from the command-line.
+- Ability to exec any shell script or node command with ease, from within Purescript
+- Ability to transform any files with extension .xxx found within a source directory, changing the extension but not the file name. So `Templates.tpurs` becomes `Templates.purs`.
+- Ability to parse a template strings file into a bunch of template string definitions, for use in purescript.
 
 TODO -- tokenizing. TypeName and FunctionName are last ... but they also match the keywords.
 So ... will that work out? Or do they have to be merged?
