@@ -259,7 +259,7 @@ b :: String
 b = "2"
 ```
 
-The code generator could insert a segment at the top, automatically, exposing all types that are public or unmarked, and hiding any that are private, as part of the build process itself -- rewriting the module exports to only expose what the annotations allow. But the problem with relying on annotations for code transformation and code-generation is that the code itself might not be valid for it. A string marked "@template" might not contain the required string literal. It's not possible to do anything but log a warning in that case.
+The code generator could insert a segment at the top, automatically, exposing all types that are public or unmarked, and hiding any that are private, as part of the build process itself -- rewriting the module exports to only expose what the annotations allow. But the problem with relying on annotations for code transformation and code-generation is that the code itself might not be valid for it. A string marked "@template" might not contain the required string literal. It's not possible to do anything but log a warning in that case -- that no literal was contained. And what we care about ... are the literals.
 
 Granted, there are definitely namespace clashes here, and code-generators have no means of detecting the _source_ of a symbol, since this isn't a formal compilation process. But even this could be solved ... later, perhaps by annotation imports within comments at the top of the file, or annotations of the module itself to help determine how we want processing to work for each file -- some files could be processed differently than others, based on their annotations.
 
