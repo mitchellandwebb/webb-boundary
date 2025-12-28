@@ -164,10 +164,105 @@ Okay. So now we can transform each of the "Kotlin" Params into a String. But the
   
 What we need right now... are 
 
-- Ability to execute any purescript namespace's function with ease, from the command-line.
-- Ability to exec any shell script or node command with ease, from within Purescript
 - Ability to transform any files with extension .xxx found within a source directory, changing the extension but not the file name. So `Templates.tpurs` becomes `Templates.purs`.
 - Ability to parse a template strings file into a bunch of template string definitions, for use in purescript.
 
-TODO -- tokenizing. TypeName and FunctionName are last ... but they also match the keywords.
-So ... will that work out? Or do they have to be merged?
+Okay. So now we have to ability to pure purescript commands from the command-line. And we have the ability to run any shell command from purescript. So what does it mean to do the transformations that we want to do? How do we get to template strings?
+
+- First, we need to make clearer the possible ways in which we can transform files, and fetch files for transformation. So for example, we should be able to query for _all_ files within a directory that match a given regex or extension, or contains something in the contents ala grep -- and get the absolute paths for all these files. That should be _easy_. Should be. It's certainly necessary. In other words, there's a need for a variety of ways to search for matching files, by a variety of parameters. And then once we have these paths, we should have a convenient way to _transform_ any set of files -- at minimum, to transform just by String to String -- and to specify the output file path. Taken together, this is per-file capability to Fetch, Convert, and Output -- transforming each file path either to the same file, or to a nearby file. That should be _easy_. 
+- Just as easily, we should be able to select custom locations for each file, in case we want to recreate the file positions in a different directory entirely.
+- We need to be able to _parse_ purescript files into data. It doesn't need to be an AST, but it _does_ need to be a reasonable representation of _what_ is present in the file, if we can parse it, in uncompiled form -- names of top-level symbols, their type signatures, and any literals they use. All of these things are sensible elements that we would want to know about, as data that we can analyze to generate _new_ strings.
+- We might even want to go further -- and perform mapping of each element in the data representation to its position in the data, and enable _editing_ of each element, of some kind.
+- Ability to _mark_ structures -- to add annotations. So just as Java has the ability to annotate a method, and just as Purescript can annotate code with comments:
+
+```
+-- | Comment
+-- | Comment
+```
+
+We also want to be able to annotate a method of any other top-level declaration with one or more annotations:
+
+```
+--@Apple 1 2
+--@Banana "hello" "goodbye"
+```
+
+This should be exposed in the data, so that folks can scan for annotations when reviewing functions, to determine if it needs further analysis. This is a decent use or comments, and helps provide additional data when scanning the code.
+
+Together, the above provides for _markings_ that can become part of compile-time analysis, and help inform how the data turns into generated code.
+
+- We need the ability to specify File Segments. This helps us handle the fact that even though we want to generate code, there are times when what we actually want is to _rewrite_ the current file, or _add_ to it, without overwriting it. For this to be true, we need delineated file segments, for example:
+
+```
+add :: Int -> Int -> Int
+add = (+)
+
+--SEG_START segmentName
+
+subtract :: Int -> Int -> Int
+subtract = (-)
+
+--SEG_END segmentName
+```
+
+In this way, a file can be recognized as being composed of particular labeled segments. If we can easily add/remove these segments, we can generate code in the same file without touching unrelated code -- ideally, at the end of all user-written code, appended to the end of the file. In the ideal case, we'd start the transformation by DELETING all generated segments, and then adding the generated code back in during the build, from the data provided by the initial code.
+
+File segments are thus ANOTHER way to transform a file -- `deleteSegment`, `appendSegment` and so on, as an abstraction for manipulating the code, if we're using segments.
+
+As a result of the above, generating template strings becomes a relatively simple affair within a purescript file: We declare strings like the below, and generate a segment:
+
+
+```
+--@template-string
+a :: String
+a = "hello ${age :: Int}, world of ${name :: String} - ${name}!"
+
+--SEG_START webb-template-strings
+template_a :: { age :: Int, name :: String } -> String
+template_a = ...
+--SEG_END webb-template-strings
+```
+
+The conversion function would be autogenerated in segments at the end of the file, although it won't compile if the provided types don't have valid Show instances -- and we will probably use an 'isString' check to avoid calling 'show' on string types -- and the generation itself would fail if missing/conflicting types for a particular name were discovered. We are auto-generating, and can choose whether to convert _all_ names, all names of a particular explicit type, or all names with a particular annotation. And the _choice_ of what is generated would then depend on a BUILD function -- one (or more) that is specified in purescript, and executed using `webb-exec`.
+
+This would remove the need for something like 
+
+```
+start a
+hello ${age :: Int}, world of ${name :: String} - ${name}!
+end a
+```
+
+We _could_ use the above as a DSL for a generator, but it's highly-specific and doesn't solve the general problem of turning Purescript into data -- any kind of data, really. It wouldn't, for example, solve the problem of generating helper methods for a render function:
+
+```
+--@props "render"
+type Props = 
+  { name :: String --@default 1
+  , age :: String --@default 2
+  , order :: String --@default 3
+  , weight :: Int
+  }
+```
+
+Based on those props, we might generate a functions and/or a monad just for the type, and a "RequiredProps" type that only has the `weight` parameter -- the rest are provided as defaults already. Likewise, in the new monad, we'd have functions specifically for setting parameters within the monad, and we'd have a `runMonad` function generated too -- all of it would be available, and ready for use, based on just one type definition, and re-generatable whenever you modify the annotations, if that's what you want.
+
+We could even obtain public/private annotations to manually hide exports while generating the export list:
+
+```
+--@private 
+a :: String
+a = "2"
+
+--@public
+b :: String
+b = "2"
+```
+
+The code generator could insert a segment at the top, automatically, exposing all types that are public or unmarked, and hiding any that are private, as part of the build process itself -- rewriting the module exports to only expose what the annotations allow. But the problem with relying on annotations for code transformation and code-generation is that the code itself might not be valid for it. A string marked "@template" might not contain the required string literal. It's not possible to do anything but log a warning in that case.
+
+Granted, there are definitely namespace clashes here, and code-generators have no means of detecting the _source_ of a symbol, since this isn't a formal compilation process. But even this could be solved ... later, perhaps by annotation imports within comments at the top of the file, or annotations of the module itself to help determine how we want processing to work for each file -- some files could be processed differently than others, based on their annotations.
+
+Thus, querying might even rely on reading the file and parsing it for its annotation, to determine which files to process.
+
+TODO -- tokenizing. TypeName and FunctionName are last ... but they also match the keywords. So ... will that work out? Or do they have to be merged?
